@@ -75,11 +75,10 @@ class ApifyClient:
         """Run the facebook-ads-library-scraper actor and return raw dataset items.
 
         Args:
-            search_query: Facebook page name or URL (e.g., "apple", "linkedin").
-                If not a full URL, will be converted to https://www.facebook.com/<query>
+            search_query: Search term for Ad Library (e.g., "creatine", "apple").
             count: Max ads to scrape (default 100).
             actor_id: Actor ID (default: from settings).
-            country: 2-letter ISO country code or "ALL" (default "US").
+            country: Country code (default "US"; actor normalizes to uppercase).
 
         Returns:
             List of raw dataset items (Meta Ad Library items) from the actor run.
@@ -90,25 +89,31 @@ class ApifyClient:
         settings = get_settings()
         actor_id = actor_id or settings.apify_actor_id
 
-        # Convert search query to Facebook page URL if needed
-        if search_query.startswith("http"):
-            page_url = search_query
-        else:
-            page_url = f"https://www.facebook.com/{search_query}"
+        # Construct Ad Library search URL with the search query
+        ad_library_url = (
+            "https://www.facebook.com/ads/library/"
+            f"?active_status=active&ad_type=all&country={country}"
+            f"&is_targeted_country=false&media_type=all&q={search_query}"
+            "&search_type=keyword_unordered"
+            "&sort_data[direction]=desc&sort_data[mode]=total_impressions"
+        )
 
         input_dict = {
-            "urls": [page_url],
-            "limitPerSource": count,
+            "urls": [{"url": ad_library_url}],
             "count": count,
+            "scrapeAdDetails": True,
             "scrapePageAds": {
-                "countryCode": country,
+                "activeStatus": "active",
+                "countryCode": country.upper(),
+                "period": "last30d",
+                "sortBy": "impressions_desc",
             },
         }
 
         logger.info(
             "apify_actor_start",
             actor_id=actor_id,
-            page_url=page_url,
+            search_query=search_query,
             country=country,
             count=count,
         )
@@ -126,14 +131,16 @@ class ApifyClient:
         logger.info(
             "apify_actor_completed",
             actor_id=actor_id,
-            run_status=run.get("status"),
+            run_status=run.status,
         )
 
         # Fetch the dataset items (the raw ad records).
         try:
-            items = self.client.dataset(run["defaultDatasetId"]).list_items()["items"]
+            dataset_page = self.client.dataset(run.default_dataset_id).list_items()
+            # DatasetItemsPage has an 'items' property with the list of records
+            items = dataset_page.items
         except Exception as e:
-            msg = f"Failed to fetch dataset from {run.get('defaultDatasetId')}: {e}"
+            msg = f"Failed to fetch dataset from {run.default_dataset_id}: {e}"
             logger.error("apify_dataset_error", exc_str=str(e))
             raise ApifyClientError(msg) from e
 

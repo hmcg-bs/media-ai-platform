@@ -37,7 +37,7 @@ def main() -> int:
         "--count",
         type=int,
         default=100,
-        help="Max ads to scrape (default 100).",
+        help="Max ads to scrape (minimum 10, default 100).",
     )
     parser.add_argument(
         "--country",
@@ -53,6 +53,11 @@ def main() -> int:
     )
 
     args = parser.parse_args()
+
+    # Validate count minimum
+    if args.count < 10:
+        logger.error("ingest_invalid_count", msg="Count must be at least 10 (Apify actor requirement).")
+        return 1
 
     settings = get_settings()
     if not settings.apify_api_token:
