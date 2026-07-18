@@ -1,13 +1,14 @@
 """Thin, mockable wrapper over apify-client for the facebook-ads-library-scraper actor.
 
-Exposes `run_ad_scrape(urls, count, ...) -> list[dict]` (raw dataset items).
-Lazily builds `ApifyClient(api_token)`, calls the configured actor, and retries
-on transient failures (429, 5xx, timeout) via tenacity.
+Exposes `run_ad_scrape(search_query, count, ...) -> list[dict]` (raw dataset items).
+The actor scrapes Meta Ad Library search results. Lazily builds `ApifyClient(api_token)`,
+calls the configured actor, and retries on transient failures (429, 5xx, timeout) via tenacity.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 
 from tenacity import (
@@ -66,16 +67,18 @@ class ApifyClient:
     )
     def run_ad_scrape(
         self,
-        urls: list[str],
+        search_query: str,
         count: int = 100,
         actor_id: str | None = None,
+        country: str = "US",
     ) -> list[dict]:
         """Run the facebook-ads-library-scraper actor and return raw dataset items.
 
         Args:
-            urls: Ad Library page URLs to scrape (e.g., brand Facebook page or search results).
+            search_query: Search term for Ad Library (e.g., "linkedin", "apple").
             count: Max ads to scrape (default 100).
             actor_id: Actor ID (default: from settings).
+            country: Country code for Ad Library (default "US").
 
         Returns:
             List of raw dataset items (Meta Ad Library items) from the actor run.
@@ -87,22 +90,23 @@ class ApifyClient:
         actor_id = actor_id or settings.apify_actor_id
 
         input_dict = {
-            "urls": urls,
+            "searchQuery": search_query,
             "limit": count,
-            "getAdLibraryData": True,  # Fetch full Ad Library snapshot (not just the ad ID).
+            "country": country,
         }
 
         logger.info(
             "apify_actor_start",
             actor_id=actor_id,
-            urls=urls,
+            search_query=search_query,
+            country=country,
             count=count,
         )
 
         try:
             run = self.client.actor(actor_id).call(
                 run_input=input_dict,
-                timeout_secs=self.timeout_s,
+                timeout=timedelta(seconds=self.timeout_s),
             )
         except Exception as e:
             msg = f"Apify actor {actor_id} failed: {e}"
@@ -133,21 +137,23 @@ class ApifyClient:
 
 # Singleton instance + injectable run_fn for tests.
 _client_instance: ApifyClient | None = None
-_run_fn: Callable[[list[str], int, str | None], list[dict]] | None = None
+_run_fn: Callable[[str, int, str | None, str], list[dict]] | None = None
 
 
 def run_ad_scrape(
-    urls: list[str],
+    search_query: str,
     count: int = 100,
     actor_id: str | None = None,
-    run_fn: Callable[[list[str], int, str | None], list[dict]] | None = None,
+    country: str = "US",
+    run_fn: Callable[[str, int, str | None, str], list[dict]] | None = None,
 ) -> list[dict]:
     """Run the facebook-ads-library-scraper actor, with injected run_fn for tests.
 
     Args:
-        urls: Ad Library page URLs to scrape.
+        search_query: Search term for Ad Library scraping.
         count: Max ads to scrape.
         actor_id: Actor ID (default: from settings).
+        country: Country code (default "US").
         run_fn: Injected function for offline tests. If provided, called instead of Apify.
 
     Returns:
@@ -156,10 +162,10 @@ def run_ad_scrape(
     global _client_instance, _run_fn
 
     if run_fn is not None:
-        return run_fn(urls, count, actor_id)
+        return run_fn(search_query, count, actor_id, country)
 
     if _run_fn is not None:
-        return _run_fn(urls, count, actor_id)
+        return _run_fn(search_query, count, actor_id, country)
 
     if _client_instance is None:
         settings = get_settings()
@@ -168,4 +174,4 @@ def run_ad_scrape(
             timeout_s=300,
         )
 
-    return _client_instance.run_ad_scrape(urls, count, actor_id)
+    return _client_instance.run_ad_scrape(search_query, count, actor_id, country)

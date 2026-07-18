@@ -12,7 +12,7 @@ class TestRunAdScrape:
         """Test that run_fn is called when provided."""
 
         def mock_run(
-            urls: list[str], count: int, actor_id: str | None
+            search_query: str, count: int, actor_id: str | None, country: str
         ) -> list[dict]:
             return [
                 {
@@ -23,7 +23,7 @@ class TestRunAdScrape:
             ]
 
         result = run_ad_scrape(
-            urls=["https://facebook.com/test"],
+            search_query="linkedin",
             count=10,
             run_fn=mock_run,
         )
@@ -35,7 +35,7 @@ class TestRunAdScrape:
         """Test that run_fn returns multiple ads."""
 
         def mock_run(
-            urls: list[str], count: int, actor_id: str | None
+            search_query: str, count: int, actor_id: str | None, country: str
         ) -> list[dict]:
             return [
                 {
@@ -47,7 +47,7 @@ class TestRunAdScrape:
             ]
 
         result = run_ad_scrape(
-            urls=["https://facebook.com/test"],
+            search_query="linkedin",
             count=10,
             run_fn=mock_run,
         )
@@ -59,12 +59,12 @@ class TestRunAdScrape:
         """Test that run_fn can return empty results."""
 
         def mock_run(
-            urls: list[str], count: int, actor_id: str | None
+            search_query: str, count: int, actor_id: str | None, country: str
         ) -> list[dict]:
             return []
 
         result = run_ad_scrape(
-            urls=["https://facebook.com/nonexistent"],
+            search_query="nonexistent",
             count=10,
             run_fn=mock_run,
         )
@@ -76,38 +76,41 @@ class TestRunAdScrape:
         captured_args: dict = {}
 
         def mock_run(
-            urls: list[str], count: int, actor_id: str | None
+            search_query: str, count: int, actor_id: str | None, country: str
         ) -> list[dict]:
-            captured_args["urls"] = urls
+            captured_args["search_query"] = search_query
             captured_args["count"] = count
             captured_args["actor_id"] = actor_id
+            captured_args["country"] = country
             return []
 
         run_ad_scrape(
-            urls=["https://facebook.com/test1", "https://facebook.com/test2"],
+            search_query="apple",
             count=50,
             actor_id="custom/actor",
+            country="IN",
             run_fn=mock_run,
         )
 
-        assert captured_args["urls"] == ["https://facebook.com/test1", "https://facebook.com/test2"]
+        assert captured_args["search_query"] == "apple"
         assert captured_args["count"] == 50
         assert captured_args["actor_id"] == "custom/actor"
+        assert captured_args["country"] == "IN"
 
-    def test_run_fn_default_actor_id(self) -> None:
-        """Test that actor_id defaults to None when not provided."""
+    def test_run_fn_default_country(self) -> None:
+        """Test that country defaults to US when not provided."""
         captured_args: dict = {}
 
         def mock_run(
-            urls: list[str], count: int, actor_id: str | None
+            search_query: str, count: int, actor_id: str | None, country: str
         ) -> list[dict]:
-            captured_args["actor_id"] = actor_id
+            captured_args["country"] = country
             return []
 
         run_ad_scrape(
-            urls=["https://facebook.com/test"],
+            search_query="test",
             count=10,
             run_fn=mock_run,
         )
 
-        assert captured_args["actor_id"] is None
+        assert captured_args["country"] == "US"

@@ -1,7 +1,7 @@
 """Step 1 ingestion CLI: scrape ads via Apify, normalize, download, write corpus.
 
 Usage:
-    python -m ingestion.ingest --url "<Ad Library page URL>" --count N \\
+    python -m ingestion.ingest --query "linkedin" --count 10 \\
       --out creatives/apify/<brand>
 """
 
@@ -28,16 +28,22 @@ def main() -> int:
         description="Scrape Facebook ads via Apify, normalize, download, write corpus."
     )
     parser.add_argument(
-        "--url",
+        "--query",
         type=str,
         required=True,
-        help="Ad Library page or search URL to scrape.",
+        help="Search query for Ad Library (e.g., 'linkedin', 'apple').",
     )
     parser.add_argument(
         "--count",
         type=int,
         default=100,
         help="Max ads to scrape (default 100).",
+    )
+    parser.add_argument(
+        "--country",
+        type=str,
+        default="US",
+        help="Country code (default US).",
     )
     parser.add_argument(
         "--out",
@@ -59,14 +65,19 @@ def main() -> int:
 
     logger.info(
         "ingest_start",
-        url=args.url,
+        query=args.query,
+        country=args.country,
         count=args.count,
         out_dir=str(out_dir),
     )
 
     # Step 1: Scrape via Apify.
     try:
-        raw_items = run_ad_scrape(urls=[args.url], count=args.count)
+        raw_items = run_ad_scrape(
+            search_query=args.query,
+            count=args.count,
+            country=args.country,
+        )
     except ApifyClientError as e:
         logger.error("ingest_scrape_failed", exc_str=str(e))
         return 1
@@ -106,7 +117,8 @@ def main() -> int:
     # Step 5: Write query provenance (token REDACTED).
     query_data: dict[str, Any] = {
         "actor_id": settings.apify_actor_id,
-        "input_urls": [args.url],
+        "search_query": args.query,
+        "country": args.country,
         "limit": args.count,
         "result_count": len(ads),
         "apify_token_redacted": "***",
