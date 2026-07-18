@@ -89,10 +89,16 @@ class ApifyClient:
         settings = get_settings()
         actor_id = actor_id or settings.apify_actor_id
 
+        # Construct Ad Library search URL in the format the actor expects
+        ad_library_url = (
+            f"https://www.facebook.com/ads/library/"
+            f"?active_status=all&ad_type=all&country={country}"
+            f"&q={search_query}&search_type=keyword_unordered"
+        )
+
         input_dict = {
-            "searchQuery": search_query,
+            "urls": [ad_library_url],
             "limit": count,
-            "country": country,
         }
 
         logger.info(
