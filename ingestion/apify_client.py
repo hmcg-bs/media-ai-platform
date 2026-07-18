@@ -75,10 +75,11 @@ class ApifyClient:
         """Run the facebook-ads-library-scraper actor and return raw dataset items.
 
         Args:
-            search_query: Search term for Ad Library (e.g., "linkedin", "apple").
+            search_query: Facebook page name or URL (e.g., "apple", "linkedin").
+                If not a full URL, will be converted to https://www.facebook.com/<query>
             count: Max ads to scrape (default 100).
             actor_id: Actor ID (default: from settings).
-            country: Country code for Ad Library (default "US").
+            country: 2-letter ISO country code or "ALL" (default "US").
 
         Returns:
             List of raw dataset items (Meta Ad Library items) from the actor run.
@@ -89,22 +90,25 @@ class ApifyClient:
         settings = get_settings()
         actor_id = actor_id or settings.apify_actor_id
 
-        # Construct Ad Library search URL in the format the actor expects
-        ad_library_url = (
-            f"https://www.facebook.com/ads/library/"
-            f"?active_status=all&ad_type=all&country={country}"
-            f"&q={search_query}&search_type=keyword_unordered"
-        )
+        # Convert search query to Facebook page URL if needed
+        if search_query.startswith("http"):
+            page_url = search_query
+        else:
+            page_url = f"https://www.facebook.com/{search_query}"
 
         input_dict = {
-            "urls": [ad_library_url],
-            "limit": count,
+            "urls": [page_url],
+            "limitPerSource": count,
+            "count": count,
+            "scrapePageAds": {
+                "countryCode": country,
+            },
         }
 
         logger.info(
             "apify_actor_start",
             actor_id=actor_id,
-            search_query=search_query,
+            page_url=page_url,
             country=country,
             count=count,
         )

@@ -31,7 +31,7 @@ def main() -> int:
         "--query",
         type=str,
         required=True,
-        help="Search query for Ad Library (e.g., 'linkedin', 'apple').",
+        help="Facebook page name or URL (e.g., 'apple', 'linkedin', or full URL).",
     )
     parser.add_argument(
         "--count",
