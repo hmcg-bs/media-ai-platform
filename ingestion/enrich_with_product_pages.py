@@ -75,8 +75,19 @@ def enrich_corpus(ads_file: Path, output_file: Path, use_llm: bool = True) -> in
             enriched_ads.append(ad_dict)
             continue
 
-        # Extract product page
-        product_page = extract_product_page(ad.link_url, html, use_llm_enrichment=use_llm)
+        # Build ad context for Stage 4c (LLM enrichment)
+        ad_context = None
+        if use_llm and (ad.title or ad.body or ad.caption):
+            ad_context = {
+                "title": ad.title or "",
+                "body": ad.body or "",
+                "caption": ad.caption or "",
+            }
+
+        # Extract product page (with optional ad context for LLM enrichment)
+        product_page = extract_product_page(
+            ad.link_url, html, use_llm_enrichment=use_llm, ad_context=ad_context
+        )
         if not product_page:
             logger.warning(
                 "enrich_extraction_failed",

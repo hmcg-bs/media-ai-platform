@@ -231,19 +231,23 @@ def extract_structured_data(url: str, html: str) -> ProductPage | None:
 
 
 def extract_product_page(
-    url: str, html: str, use_llm_enrichment: bool = True
+    url: str,
+    html: str,
+    use_llm_enrichment: bool = True,
+    ad_context: dict[str, str] | None = None,
 ) -> ProductPage | None:
     """Full pipeline: scrape + structured extract + optional LLM enrichment.
 
     Orchestrates Stages 4a-4c:
     - 4a: HTML scraping (already done upstream)
     - 4b: Structured data extraction (JSON-LD, OG tags)
-    - 4c: LLM enrichment for semantic fields (category, USP, branding, variants)
+    - 4c: LLM enrichment for semantic fields (category, USP, branding, variants) + ad context
 
     Args:
         url: The product page URL.
         html: HTML content.
         use_llm_enrichment: If True, call Gemini for semantic fields. Default True.
+        ad_context: Optional ad marketing context: {"title": "...", "body": "...", "caption": "..."}
 
     Returns:
         Fully extracted ProductPage, or None if extraction failed.
@@ -255,7 +259,7 @@ def extract_product_page(
 
     # Stage 4c: Optional LLM enrichment for semantic fields
     if use_llm_enrichment:
-        enriched = extract_semantic_fields(html, product)
+        enriched = extract_semantic_fields(html, product, ad_context=ad_context)
         if enriched:
             return enriched
 

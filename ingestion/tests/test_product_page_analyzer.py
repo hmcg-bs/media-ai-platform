@@ -127,3 +127,71 @@ def test_extract_semantic_preserves_structured_fields() -> None:
     assert enriched.price == 19.99
     assert enriched.rating == 4.5
     assert enriched.marketing_copy == "High-quality creatine"
+
+
+def test_extract_semantic_with_ad_context() -> None:
+    """Test LLM extraction includes ad context in prompt."""
+    partial_product = ProductPage(
+        product_name="Premium Creatine",
+        brand_name="MyBrand",
+    )
+
+    ad_context = {
+        "title": "Best Creatine Supplement for Muscle Growth",
+        "body": "Boost your workout performance with our premium creatine monohydrate.",
+        "caption": "Shop now and save 20%",
+    }
+
+    mock_extraction = SemanticExtraction(
+        product_category="Supplements",
+        product_subcategory="Creatine",
+        usp="Muscle growth supplement",
+        cultural_branding=["Premium", "Fitness"],
+    )
+
+    with patch(
+        "ingestion.product_page_analyzer.ReplicateVisionClient.extract_structured_text"
+    ) as mock_llm:
+        mock_llm.return_value = mock_extraction
+
+        enriched = extract_semantic_fields(
+            "<html></html>", partial_product, ad_context=ad_context
+        )
+
+    # Verify extraction was called
+    assert mock_llm.called
+    # Verify ad context was included in the prompt
+    call_args = mock_llm.call_args
+    prompt = call_args.kwargs["prompt"] if "prompt" in call_args.kwargs else call_args[0][0]
+    assert "Marketing Context from Ad" in prompt
+    assert "Best Creatine Supplement" in prompt
+    assert "Boost your workout" in prompt
+
+    # Verify enrichment succeeded
+    assert enriched.product_category == "Supplements"
+    assert enriched.usp == "Muscle growth supplement"
+
+
+def test_extract_semantic_without_ad_context() -> None:
+    """Test LLM extraction works without ad context (backward compatible)."""
+    partial_product = ProductPage(product_name="Test Product")
+
+    mock_extraction = SemanticExtraction(
+        product_category="Test Category",
+    )
+
+    with patch(
+        "ingestion.product_page_analyzer.ReplicateVisionClient.extract_structured_text"
+    ) as mock_llm:
+        mock_llm.return_value = mock_extraction
+
+        enriched = extract_semantic_fields("<html></html>", partial_product, ad_context=None)
+
+    # Should work without ad_context
+    assert enriched is not None
+    assert enriched.product_category == "Test Category"
+
+    # Verify no ad context section in prompt
+    call_args = mock_llm.call_args
+    prompt = call_args.kwargs["prompt"] if "prompt" in call_args.kwargs else call_args[0][0]
+    assert "Marketing Context from Ad" not in prompt

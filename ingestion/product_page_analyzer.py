@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 
 from ingestion.product_page import ProductPage
 from pipeline.clients.replicate_client import ReplicateVisionClient
-from pipeline.config import get_settings
 from pipeline.logger import get_logger
 
 logger = get_logger(__name__)
@@ -46,13 +45,16 @@ class SemanticExtraction(BaseModel):
 
 
 def extract_semantic_fields(
-    html: str, partial_product: ProductPage
+    html: str,
+    partial_product: ProductPage,
+    ad_context: dict[str, str] | None = None,
 ) -> ProductPage | None:
-    """Extract semantic fields from HTML using Gemini.
+    """Extract semantic fields from HTML using Gemini, with optional ad context.
 
     Args:
         html: Full HTML content of the landing page.
         partial_product: ProductPage with already-extracted structured data.
+        ad_context: Optional ad marketing context: {"title": "...", "body": "...", "caption": "..."}
 
     Returns:
         Enriched ProductPage with semantic fields filled, or None on error.
@@ -61,27 +63,37 @@ def extract_semantic_fields(
         logger.warning("extract_semantic_skipped", reason="missing_html_or_product_name")
         return None
 
-    settings = get_settings()
     client = ReplicateVisionClient()
 
+    # Build ad context section if provided
+    ad_context_str = ""
+    if ad_context:
+        ad_context_str = "\n**Marketing Context from Ad:**\n"
+        if ad_context.get("title"):
+            ad_context_str += f"- Title: {ad_context['title']}\n"
+        if ad_context.get("body"):
+            ad_context_str += f"- Body: {ad_context['body'][:300]}\n"
+        if ad_context.get("caption"):
+            ad_context_str += f"- Caption: {ad_context['caption']}\n"
+
     # Construct prompt
-    prompt = f"""Analyze this HTML for a product page and extract semantic information about the product.
+    prompt = f"""Extract semantic product info from this HTML page.
 
 **Known product info:**
 - Name: {partial_product.product_name}
 - Brand: {partial_product.brand_name or "(not known)"}
 - Price: ${partial_product.price or "(not known)"} {partial_product.price_currency}
-- Rating: {partial_product.rating or "(not known)"}
+- Rating: {partial_product.rating or "(not known)"}{ad_context_str}
 
-**Your task:** Extract semantic fields from the HTML content.
+**Extract these fields:**
 
-1. **Product category:** Broad category (e.g., "Supplements", "Apparel", "Electronics", "Furniture")
-2. **Subcategory:** Specific sub-category (e.g., "Pre-Workout", "Amino Acids", "Wooden Furniture")
-3. **USP:** What makes this product special? Max 150 characters. (e.g., "Vegan, Non-GMO, Lab-tested")
-4. **Cultural branding:** Brand identity signals as list (e.g., ["American Made", "Hand-crafted", "Eco-Friendly"])
-5. **Variants featured:** Specific variants mentioned as list (e.g., ["Flavor: Strawberry", "Size: 500g"])
-6. **Shows all variants:** Boolean - does the page/product show multiple SKUs or a variant selector?
-7. **Price range:** If multiple prices found, format as "$X-$Y"; otherwise leave empty.
+1. **Category:** Broad category (Supplements, Apparel, Electronics, Furniture, etc.)
+2. **Subcategory:** Specific sub (Pre-Workout, Amino Acids, Wooden Furniture, etc.)
+3. **USP:** What makes it special? Max 150 chars (Vegan, Non-GMO, Lab-tested, etc.)
+4. **Cultural branding:** Brand signals as list (American Made, Hand-crafted, Eco, etc.)
+5. **Variants featured:** Variants as list (Flavor: Strawberry, Size: 500g, etc.)
+6. **Shows all variants:** Boolean - multiple SKUs or variant selector present?
+7. **Price range:** If multiple prices "$X-$Y"; else empty.
 
 Look for this information in:
 - Product title and description
