@@ -3,11 +3,15 @@
 One ``CompetitorAd`` per scraped Meta Ad Library item. Captures the copy + creative handles
 plus the raw performance-proxy signals (``days_active`` = Longevity, ``is_active`` +
 ``collation_count`` = Variant); the composite proxy is computed later in Step 3, never here.
+
+Stage 4 adds ``product_page`` analysis from landing-page scraping (product categorization).
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
+
+from ingestion.product_page import ProductPage
 
 
 class CompetitorAd(BaseModel):
@@ -36,3 +40,6 @@ class CompetitorAd(BaseModel):
     # Filled after download / at ingest time
     local_image_path: str | None = None
     ingested_at: str = ""
+
+    # Stage 4: Landing-page analysis (product categorization)
+    product_page: ProductPage | None = None

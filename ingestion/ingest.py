@@ -56,7 +56,10 @@ def main() -> int:
 
     # Validate count minimum
     if args.count < 10:
-        logger.error("ingest_invalid_count", msg="Count must be at least 10 (Apify actor requirement).")
+        logger.error(
+            "ingest_invalid_count",
+            msg="Count must be at least 10 (Apify actor requirement).",
+        )
         return 1
 
     settings = get_settings()
