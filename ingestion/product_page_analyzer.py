@@ -9,7 +9,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from ingestion.product_page import ProductPage
-from pipeline.clients.genai_client import GenAIClient
+from pipeline.clients.replicate_client import ReplicateVisionClient
 from pipeline.config import get_settings
 from pipeline.logger import get_logger
 
@@ -62,10 +62,10 @@ def extract_semantic_fields(
         return None
 
     settings = get_settings()
-    client = GenAIClient()
+    client = ReplicateVisionClient()
 
     # Construct prompt
-    prompt = f"""Analyze HTML for a product page and extract semantic information.
+    prompt = f"""Analyze this HTML for a product page and extract semantic information about the product.
 
 **Known product info:**
 - Name: {partial_product.product_name}
@@ -73,23 +73,28 @@ def extract_semantic_fields(
 - Price: ${partial_product.price or "(not known)"} {partial_product.price_currency}
 - Rating: {partial_product.rating or "(not known)"}
 
-**Your task:**
-1. Category: Broad category (e.g., "Supplements", "Apparel", "Electronics")
-2. Subcategory: Specific sub (e.g., "Pre-Workout", "Amino Acids")
-3. USP: What makes it special? (max 150 chars)
-4. Cultural branding: Brand signals (e.g., "American Made", "Eco-Friendly")
-5. Variants featured: Variants mentioned (e.g., "Flavor: Strawberry", "Size: 500g")
-6. Shows all variants: Multiple SKUs or variant selector present?
-7. Price range: If multiple prices "$X-$Y"; else empty.
+**Your task:** Extract semantic fields from the HTML content.
 
-Look in: title/description, breadcrumbs, variant selectors, pricing options,
-marketing copy with certifications/origins, meta tags.
+1. **Product category:** Broad category (e.g., "Supplements", "Apparel", "Electronics", "Furniture")
+2. **Subcategory:** Specific sub-category (e.g., "Pre-Workout", "Amino Acids", "Wooden Furniture")
+3. **USP:** What makes this product special? Max 150 characters. (e.g., "Vegan, Non-GMO, Lab-tested")
+4. **Cultural branding:** Brand identity signals as list (e.g., ["American Made", "Hand-crafted", "Eco-Friendly"])
+5. **Variants featured:** Specific variants mentioned as list (e.g., ["Flavor: Strawberry", "Size: 500g"])
+6. **Shows all variants:** Boolean - does the page/product show multiple SKUs or a variant selector?
+7. **Price range:** If multiple prices found, format as "$X-$Y"; otherwise leave empty.
 
-Respond with JSON matching the schema."""
+Look for this information in:
+- Product title and description
+- Category breadcrumbs or navigation
+- Variant selectors (dropdowns, radio buttons, tabs)
+- Price options for different sizes/colors/flavors
+- Marketing copy mentioning certifications, origins, craftsmanship
+- Meta tags and structured text
+
+Respond with valid JSON matching the schema. Do not include markdown formatting."""
 
     try:
         extraction = client.extract_structured_text(
-            model=settings.gemini_cheap_model,
             prompt=prompt,
             schema=SemanticExtraction,
         )

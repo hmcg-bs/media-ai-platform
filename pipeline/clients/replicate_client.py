@@ -148,7 +148,7 @@ class EmbeddingClient(_ReplicateBase):
 
 
 class ReplicateVisionClient(_ReplicateBase):
-    """Extract structured JSON from images using google/gemini-3-flash via Replicate."""
+    """Extract structured JSON from images or text using google/gemini-3-flash via Replicate."""
 
     def extract_structured(
         self,
@@ -191,6 +191,47 @@ class ReplicateVisionClient(_ReplicateBase):
         json_str = json_str.strip()
         if json_str.startswith("```json"):
             json_str = json_str[7:]  # len("```json")
+        elif json_str.startswith("```"):
+            json_str = json_str[3:]
+        if json_str.endswith("```"):
+            json_str = json_str[:-3]
+        json_str = json_str.strip()
+
+        logger.debug("replicate_raw_json", raw_json=json_str[:200])
+        return schema.model_validate_json(json_str)
+
+    def extract_structured_text(
+        self,
+        prompt: str,
+        schema: type[T],
+    ) -> T:
+        """Send text-only prompt to Gemini; return the parsed Pydantic model (no image).
+
+        Args:
+            prompt: Text instruction for the model.
+            schema: Pydantic model to parse the JSON response into.
+
+        Returns:
+            Instance of ``schema`` with the extracted data.
+        """
+        logger.debug("replicate_call_text_only", model=self.settings.replicate_gemini_model)
+
+        out = self._execute(
+            self.settings.replicate_gemini_model,
+            {
+                "prompt": prompt,
+            },
+        )
+        # Output may be a list of strings (streaming) or a single string.
+        if isinstance(out, list):
+            json_str = "".join(str(item) for item in out)
+        else:
+            json_str = str(out)
+
+        # Strip markdown fences
+        json_str = json_str.strip()
+        if json_str.startswith("```json"):
+            json_str = json_str[7:]
         elif json_str.startswith("```"):
             json_str = json_str[3:]
         if json_str.endswith("```"):

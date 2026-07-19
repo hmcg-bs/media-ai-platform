@@ -50,7 +50,7 @@ def test_extract_semantic_with_mock_llm() -> None:
     )
 
     with patch(
-        "ingestion.product_page_analyzer.GenAIClient.extract_structured_text"
+        "ingestion.product_page_analyzer.ReplicateVisionClient.extract_structured_text"
     ) as mock_llm:
         mock_llm.return_value = mock_extraction
 
@@ -89,7 +89,7 @@ def test_extract_semantic_handles_llm_error() -> None:
     partial_product = ProductPage(product_name="Test Product")
 
     with patch(
-        "ingestion.product_page_analyzer.GenAIClient.extract_structured_text"
+        "ingestion.product_page_analyzer.ReplicateVisionClient.extract_structured_text"
     ) as mock_llm:
         mock_llm.side_effect = RuntimeError("LLM API error")
 
@@ -116,7 +116,7 @@ def test_extract_semantic_preserves_structured_fields() -> None:
     )
 
     with patch(
-        "ingestion.product_page_analyzer.GenAIClient.extract_structured_text"
+        "ingestion.product_page_analyzer.ReplicateVisionClient.extract_structured_text"
     ) as mock_llm:
         mock_llm.return_value = mock_extraction
 

@@ -209,7 +209,7 @@ class TestExtractProductPageOrchestration:
         )
 
         with patch(
-            "ingestion.product_page_analyzer.GenAIClient.extract_structured_text"
+            "ingestion.product_page_analyzer.ReplicateVisionClient.extract_structured_text"
         ) as mock_llm:
             mock_llm.return_value = mock_extraction
 
