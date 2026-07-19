@@ -83,3 +83,38 @@ class GenAIClient:
 
         # Fall back to parsing raw text if the SDK didn't pre-parse.
         return schema.model_validate_json(response.text)
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        reraise=True,
+    )
+    def extract_structured_text(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        schema: type[T],
+    ) -> T:
+        """Send text prompt to Gemini; return the parsed Pydantic model (no image)."""
+        from google.genai import types
+
+        client = self._ensure_client()
+        logger.debug("api_call_attempted", api="genai.generate_content", model=model)
+
+        response = client.models.generate_content(
+            model=model,
+            contents=[prompt],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=schema,
+                temperature=0.1,
+            ),
+        )
+
+        parsed = getattr(response, "parsed", None)
+        if isinstance(parsed, schema):
+            logger.debug("api_call_succeeded", api="genai.generate_content", model=model)
+            return parsed
+
+        return schema.model_validate_json(response.text)

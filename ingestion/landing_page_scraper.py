@@ -1,7 +1,8 @@
-"""Stage 4a: Landing page HTML scraping and structured data extraction.
+"""Stages 4a-4c: Landing page analysis.
 
-Scrapes product landing pages and extracts structured data (JSON-LD, OG tags, microdata)
-for product categorization.
+4a: Scrape HTML + structure detection
+4b: Extract structured data (JSON-LD, OG tags)
+4c: LLM extraction for semantic fields (category, USP, branding, variants)
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import requests
 from structlog import get_logger
 
 from ingestion.product_page import ProductPage
+from ingestion.product_page_analyzer import extract_semantic_fields
 
 logger = get_logger(__name__)
 
@@ -226,3 +228,35 @@ def extract_structured_data(url: str, html: str) -> ProductPage | None:
     )
 
     return product_page
+
+
+def extract_product_page(
+    url: str, html: str, use_llm_enrichment: bool = True
+) -> ProductPage | None:
+    """Full pipeline: scrape + structured extract + optional LLM enrichment.
+
+    Orchestrates Stages 4a-4c:
+    - 4a: HTML scraping (already done upstream)
+    - 4b: Structured data extraction (JSON-LD, OG tags)
+    - 4c: LLM enrichment for semantic fields (category, USP, branding, variants)
+
+    Args:
+        url: The product page URL.
+        html: HTML content.
+        use_llm_enrichment: If True, call Gemini for semantic fields. Default True.
+
+    Returns:
+        Fully extracted ProductPage, or None if extraction failed.
+    """
+    # Stage 4b: Structured data extraction
+    product = extract_structured_data(url, html)
+    if not product:
+        return None
+
+    # Stage 4c: Optional LLM enrichment for semantic fields
+    if use_llm_enrichment:
+        enriched = extract_semantic_fields(html, product)
+        if enriched:
+            return enriched
+
+    return product

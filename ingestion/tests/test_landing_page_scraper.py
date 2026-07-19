@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 
+from unittest.mock import patch
+
 from ingestion.landing_page_scraper import (
     extract_from_json_ld,
     extract_from_og_tags,
     extract_json_ld,
     extract_og_tags,
+    extract_product_page,
     extract_structured_data,
 )
 
@@ -152,4 +155,77 @@ class TestExtractStructuredData:
         """Test returns None if no structured data found."""
         html = "<html><body>No product data</body></html>"
         result = extract_structured_data("https://example.com", html)
+        assert result is None
+
+
+class TestExtractProductPageOrchestration:
+    """Test full extraction orchestration (4a + 4b + optional 4c)."""
+
+    def test_extract_without_llm_enrichment(self) -> None:
+        """Test extraction without LLM enrichment."""
+        json_ld = {
+            "@type": "Product",
+            "name": "Test Product",
+            "brand": {"name": "TestBrand"},
+            "offers": {"price": "19.99", "priceCurrency": "USD"},
+        }
+        html = f"""
+        <head>
+        <script type="application/ld+json">
+        {json.dumps(json_ld)}
+        </script>
+        </head>
+        """
+        result = extract_product_page("https://example.com/product", html, use_llm_enrichment=False)
+        assert result is not None
+        assert result.product_name == "Test Product"
+        assert result.brand_name == "TestBrand"
+        assert result.extraction_method == "structured_data"
+
+    def test_extract_with_llm_enrichment(self) -> None:
+        """Test extraction with LLM enrichment applied."""
+        from ingestion.product_page_analyzer import SemanticExtraction
+
+        json_ld = {
+            "@type": "Product",
+            "name": "Creatine",
+            "brand": {"name": "MyBrand"},
+            "offers": {"price": "19.99", "priceCurrency": "USD"},
+        }
+        html = f"""
+        <head>
+        <script type="application/ld+json">
+        {json.dumps(json_ld)}
+        </script>
+        </head>
+        <body>Premium creatine supplement from America</body>
+        """
+
+        mock_extraction = SemanticExtraction(
+            product_category="Supplements",
+            product_subcategory="Creatine",
+            usp="Pure creatine monohydrate",
+            cultural_branding=["American Made"],
+        )
+
+        with patch(
+            "ingestion.product_page_analyzer.GenAIClient.extract_structured_text"
+        ) as mock_llm:
+            mock_llm.return_value = mock_extraction
+
+            result = extract_product_page(
+                "https://example.com/product", html, use_llm_enrichment=True
+            )
+
+        assert result is not None
+        assert result.product_name == "Creatine"
+        assert result.product_category == "Supplements"
+        assert result.product_subcategory == "Creatine"
+        assert result.extraction_method == "structured_data+llm"
+        assert result.confidence == 0.75
+
+    def test_extract_returns_none_if_structured_data_fails(self) -> None:
+        """Test returns None if structured extraction fails."""
+        html = "<html><body>No product data</body></html>"
+        result = extract_product_page("https://example.com", html, use_llm_enrichment=True)
         assert result is None
