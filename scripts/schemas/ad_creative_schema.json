@@ -1,0 +1,76 @@
+{
+  "type": "object",
+  "title": "AdCreativeExtraction",
+  "description": "Structured features of a single-page ad creative, recoverable from converted text + image captions.",
+  "properties": {
+    "text_elements": {
+      "type": "array",
+      "description": "One entry per distinct text block visible in the creative, in reading order.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text_content": {
+            "type": "string",
+            "description": "Exact verbatim text of this block, preserving line breaks, casing, and symbols like the trademark sign."
+          },
+          "semantic_role": {
+            "type": "string",
+            "description": "The single best-fit functional role: badge, headline, subheadline, feature_benefit, body_copy, cta, brand_logo, legal_disclaimer, or price."
+          }
+        },
+        "required": ["text_content", "semantic_role"]
+      }
+    },
+    "visual_assets": {
+      "type": "array",
+      "description": "One entry per non-text visual element (photograph, illustration, diagram, icon, logo mark, background).",
+      "items": {
+        "type": "object",
+        "properties": {
+          "asset_type": {
+            "type": "string",
+            "description": "photo, illustration, diagram, icon, logo_mark, or background."
+          },
+          "description": {
+            "type": "string",
+            "description": "Natural-language description of what the asset depicts."
+          },
+          "depicts_product": {
+            "type": "boolean",
+            "description": "True if this asset shows the advertised product itself."
+          }
+        },
+        "required": ["asset_type", "description"]
+      }
+    },
+    "message": {
+      "type": "object",
+      "description": "Marketing interpretation inferable from the text alone.",
+      "properties": {
+        "brand_name": {
+          "type": "string",
+          "description": "The advertised brand exactly as written."
+        },
+        "primary_value_proposition": {
+          "type": "string",
+          "description": "The core benefit or claim the ad makes."
+        },
+        "hook_type": {
+          "type": "string",
+          "description": "Persuasion angle: fact_education, curiosity, social_proof, benefit_led, problem_solution, authority, or urgency."
+        },
+        "claimed_benefits": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Distinct benefits or outcomes the copy claims."
+        },
+        "cta_present": {
+          "type": "boolean",
+          "description": "Whether an explicit call-to-action appears in the text."
+        }
+      },
+      "required": ["primary_value_proposition", "hook_type", "cta_present"]
+    }
+  },
+  "required": ["text_elements", "visual_assets"]
+}

@@ -1,0 +1,141 @@
+"""Replicate client tests — injected runner, no network/paid calls."""
+
+from __future__ import annotations
+
+import io
+
+import httpx
+from replicate.exceptions import ReplicateError
+
+from pipeline.clients.replicate_client import (
+    EmbeddingClient,
+    QwenLayersClient,
+    QwenVLClient,
+    _is_retryable,
+    _to_bytes,
+)
+from pipeline.config import Settings
+
+# Fast backoff so retry tests don't actually sleep.
+_FAST = Settings(api_max_attempts=3, api_backoff_min_seconds=0.01, api_backoff_max_seconds=0.02)
+
+
+class _FakeError(ReplicateError):
+    def __init__(self, status: int):
+        self.status = status
+
+
+class _FileOutput:
+    """Stand-in for a replicate FileOutput (file-like)."""
+
+    def __init__(self, data: bytes):
+        self._data = data
+
+    def read(self) -> bytes:
+        return self._data
+
+
+def test_qwen_layers_passes_input_and_reads_layers():
+    calls: list[tuple[str, dict]] = []
+
+    def run(model, inputs):
+        calls.append((model, inputs))
+        return [_FileOutput(b"layer0"), _FileOutput(b"layer1")]
+
+    layers = QwenLayersClient(run=run).decompose(b"\x89PNG-fake")
+    assert layers == [b"layer0", b"layer1"]
+    model, inputs = calls[0]
+    assert model == "qwen/qwen-image-layered"
+    assert isinstance(inputs["image"], io.BytesIO)
+    assert inputs["num_layers"] == 4
+    assert inputs["output_format"] == "png"
+
+
+def test_qwen_vl_returns_string():
+    def run(model, inputs):
+        assert model.startswith("lucataco/qwen3-vl-8b-instruct")
+        assert inputs["prompt"] == "Describe the product."
+        assert isinstance(inputs["media"], io.BytesIO)
+        return "A hand holding a scoop of white powder."
+
+    out = QwenVLClient(run=run).describe(b"img", prompt="Describe the product.")
+    assert out == "A hand holding a scoop of white powder."
+
+
+def test_qwen_vl_joins_streamed_chunks():
+    def run(model, inputs):
+        return ["A hand ", "holding ", "a scoop."]
+
+    out = QwenVLClient(run=run).describe(b"img", prompt="x")
+    assert out == "A hand holding a scoop."
+
+
+def test_embedding_returns_float_vector():
+    captured: dict = {}
+
+    def run(model, inputs):
+        captured.update(inputs)
+        assert model.startswith("zsxkib/embedding-gemma-300m")
+        return [0.1, 0.2, 0.3]
+
+    vec = EmbeddingClient(run=run).embed("4 scoops a day", task="retrieval_query")
+    assert vec == [0.1, 0.2, 0.3]
+    assert captured["text"] == "4 scoops a day"
+    assert captured["task"] == "retrieval_query"
+    assert captured["output_format"] == "array"
+    assert captured["embedding_dim"] == 768
+
+
+def test_is_retryable_classification():
+    assert _is_retryable(httpx.ReadTimeout("x")) is True
+    assert _is_retryable(_FakeError(429)) is True
+    assert _is_retryable(_FakeError(503)) is True
+    assert _is_retryable(_FakeError(404)) is False       # our bug, don't retry
+    assert _is_retryable(ValueError("x")) is False
+
+
+def test_retries_on_throttle_then_succeeds():
+    attempts = {"n": 0}
+
+    def run(model, inputs):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise _FakeError(429)                          # throttled once
+        return [0.4, 0.5]
+
+    vec = EmbeddingClient(run=run, settings=_FAST).embed("hi")
+    assert vec == [0.4, 0.5]
+    assert attempts["n"] == 2                        # retried once
+
+
+def test_does_not_retry_non_retryable():
+    attempts = {"n": 0}
+
+    def run(model, inputs):
+        attempts["n"] += 1
+        raise _FakeError(404)                              # 404 → give up immediately
+
+    import pytest
+
+    with pytest.raises(ReplicateError):
+        QwenVLClient(run=run, settings=_FAST).describe(b"x", prompt="p")
+    assert attempts["n"] == 1                        # no retry
+
+
+def test_to_bytes_handles_str_url(monkeypatch):
+    import pipeline.clients.replicate_client as mod
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b"downloaded"
+
+    monkeypatch.setattr(mod.urllib.request, "urlopen", lambda url: _Resp())
+    assert _to_bytes("https://replicate.delivery/x.png") == b"downloaded"
+    assert _to_bytes(b"raw") == b"raw"
+    assert _to_bytes(_FileOutput(b"fileout")) == b"fileout"

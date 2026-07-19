@@ -1,0 +1,78 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Pipeline output (local extraction JSON)
+out/
+
+# Creatives: ignore actual images + outputs (may be proprietary), keep folders
+creatives/input/*
+creatives/output/*
+!creatives/input/.gitkeep
+!creatives/output/.gitkeep
+!creatives/README.md
+
+# Local uv cache
+.uv/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/dist/
+frontend/.env.local
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db

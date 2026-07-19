@@ -1,0 +1,25 @@
+# Social Media Analysis Agent — Step 2 (Ensemble Extraction Pipeline)
+# Local CLI build: deterministic stages + cloud cognitive layer.
+
+# ─── Cognitive layer (Vertex AI via Gen AI SDK) ───────────────────────
+google-genai>=1.0.0
+
+# ─── Deterministic vision ─────────────────────────────────────────────
+google-cloud-vision>=3.7.0      # OCR + text bounding boxes
+opencv-python>=4.9.0            # K-Means colour clustering
+pillow>=10.0.0                  # image metadata / resize
+numpy>=1.26.0
+
+# ─── Schema, config, logging, retries ─────────────────────────────────
+pydantic>=2.7.0
+pydantic-settings>=2.2.0
+structlog>=24.1.0
+tenacity>=8.3.0                 # exponential backoff on Vision / Vertex calls
+
+# ─── Testing ──────────────────────────────────────────────────────────
+pytest>=8.0.0
+pytest-mock>=3.12.0
+
+# ─── Code quality ─────────────────────────────────────────────────────
+ruff>=0.4.0
+mypy>=1.10.0

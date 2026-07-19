@@ -1,0 +1,283 @@
+{
+  "text_elements": [
+    {
+      "text_content": "FACT",
+      "semantic_role": "badge",
+      "block_id": "/page/0/Text/0",
+      "bbox": [
+        680.0,
+        513.0,
+        853.0,
+        581.0
+      ],
+      "polygon": [
+        [
+          680.0,
+          513.0
+        ],
+        [
+          853.0,
+          513.0
+        ],
+        [
+          853.0,
+          581.0
+        ],
+        [
+          680.0,
+          581.0
+        ]
+      ]
+    },
+    {
+      "text_content": "4 SCOOPS OF\nARMRA COLOSTRUM\u2122\nA DAY UNLOCKS:",
+      "semantic_role": "headline",
+      "block_id": "/page/0/SectionHeader/1",
+      "bbox": [
+        192.0,
+        664.0,
+        1336.0,
+        1029.0
+      ],
+      "polygon": [
+        [
+          192.0,
+          664.0
+        ],
+        [
+          1336.0,
+          664.0
+        ],
+        [
+          1336.0,
+          1029.0
+        ],
+        [
+          192.0,
+          1029.0
+        ]
+      ]
+    },
+    {
+      "text_content": "ARMRA\u2122\nCOLOSTRUM",
+      "semantic_role": "brand_logo",
+      "block_id": "/page/0/Text/3",
+      "bbox": [
+        545.0,
+        2200.0,
+        984.0,
+        2373.0
+      ],
+      "polygon": [
+        [
+          545.0,
+          2200.0
+        ],
+        [
+          984.0,
+          2200.0
+        ],
+        [
+          984.0,
+          2373.0
+        ],
+        [
+          545.0,
+          2373.0
+        ]
+      ]
+    }
+  ],
+  "visual_assets": [
+    {
+      "asset_type": "diagram",
+      "asset_type_citations": [
+        "/page/0/Diagram/2"
+      ],
+      "asset_type_meta": {
+        "extraction_status": "EXTRACTED",
+        "reasoning": null,
+        "citations": [
+          "/page/0/Diagram/2"
+        ],
+        "verification": {
+          "status": "PASS",
+          "feedback": "The asset type is 'diagram', which correctly describes the diagram asset at /page/0/Diagram/2.\n\nPASS:\nConclusion: \"diagram\", which agrees with the extraction."
+        }
+      },
+      "description": "A central graphic shows a small white scoop filled with powder, with a line extending from it to the right, ending in a hand holding a spoonful of the same powder. Dotted lines radiate from the scoop to five text labels: STRENGTHENED IMMUNITY (top), VITALIZED HAIR (top-left), ENHANCED SKIN (left), COMBATTED BLOATING (bottom-left), and AND THOUSANDS MORE WHOLE BODY BENEFITS (bottom).",
+      "description_citations": [
+        "/page/0/Diagram/2"
+      ],
+      "description_meta": {
+        "extraction_status": "EXTRACTED",
+        "reasoning": null,
+        "citations": [
+          "/page/0/Diagram/2"
+        ],
+        "verification": {
+          "status": "PASS",
+          "feedback": "The description matches the detailed description of the diagram at /page/0/Diagram/2.\n\nPASS:\nConclusion: \"A central graphic shows a small white scoop filled with powder, with a line extending from it to the right, ending in a hand holding a spoonful of the same powder. Dotted lines radiate from the scoop to five text labels: STRENGTHENED IMMUNITY (top), VITALIZED HAIR (top-left), ENHANCED SKIN (left), COMBATTED BLOATING (bottom-left), and AND THOUSANDS MORE WHOLE BODY BENEFITS (bottom).\", which agrees with the extraction."
+        }
+      },
+      "depicts_product": true,
+      "depicts_product_citations": [
+        "/page/0/Diagram/2"
+      ],
+      "depicts_product_meta": {
+        "extraction_status": "EXTRACTED",
+        "reasoning": null,
+        "citations": [
+          "/page/0/Diagram/2"
+        ],
+        "verification": {
+          "status": "PASS",
+          "feedback": "The value is true, as the diagram depicts a scoop of the advertised Armra Colostrum powder at /page/0/Diagram/2.\n\nPASS:\nConclusion: true, which agrees with the extraction."
+        }
+      }
+    }
+  ],
+  "message": {
+    "brand_name": "ARMRA",
+    "brand_name_citations": [
+      "/page/0/Text/3"
+    ],
+    "brand_name_meta": {
+      "extraction_status": "EXTRACTED",
+      "reasoning": null,
+      "citations": [
+        "/page/0/Text/3"
+      ],
+      "verification": {
+        "status": "PASS",
+        "feedback": "The brand name is 'ARMRA', which matches the brand text block at /page/0/Text/3.\n\nPASS:\nConclusion: \"ARMRA\", which agrees with the extraction."
+      }
+    },
+    "primary_value_proposition": "4 scoops of ARMRA Colostrum a day unlocks whole body benefits",
+    "primary_value_proposition_citations": [
+      "/page/0/SectionHeader/1",
+      "/page/0/Diagram/2"
+    ],
+    "primary_value_proposition_meta": {
+      "extraction_status": "EXTRACTED",
+      "reasoning": null,
+      "citations": [
+        "/page/0/SectionHeader/1",
+        "/page/0/Diagram/2"
+      ],
+      "verification": {
+        "status": "PASS",
+        "feedback": "The primary value proposition is '4 scoops of ARMRA Colostrum a day unlocks whole body benefits', which is supported by /page/0/SectionHeader/1 and /page/0/Diagram/2.\n\nPASS:\nConclusion: \"4 scoops of ARMRA Colostrum a day unlocks whole body benefits\", which agrees with the extraction."
+      }
+    },
+    "hook_type": "benefit_led",
+    "hook_type_citations": [
+      "/page/0/SectionHeader/1",
+      "/page/0/Diagram/2"
+    ],
+    "hook_type_meta": {
+      "extraction_status": "EXTRACTED",
+      "reasoning": null,
+      "citations": [
+        "/page/0/SectionHeader/1",
+        "/page/0/Diagram/2"
+      ],
+      "verification": {
+        "status": "PASS",
+        "feedback": "The hook type is 'benefit_led', as the ad focuses on the health benefits unlocked by taking the product, supported by /page/0/SectionHeader/1 and /page/0/Diagram/2.\n\nPASS:\nConclusion: \"benefit_led\", which agrees with the extraction."
+      }
+    },
+    "claimed_benefits": [
+      "STRENGTHENED IMMUNITY",
+      "VITALIZED HAIR",
+      "ENHANCED SKIN",
+      "COMBATTED BLOATING",
+      "THOUSANDS MORE WHOLE BODY BENEFITS"
+    ],
+    "claimed_benefits_citations": [
+      "/page/0/Diagram/2"
+    ],
+    "claimed_benefits_meta": {
+      "items": [
+        {
+          "extraction_status": "EXTRACTED",
+          "reasoning": null,
+          "citations": [
+            "/page/0/Diagram/2"
+          ],
+          "verification": {
+            "status": "PASS",
+            "feedback": "The benefit is 'STRENGTHENED IMMUNITY', which matches the label in the diagram at /page/0/Diagram/2.\n\nPASS:\nConclusion: \"STRENGTHENED IMMUNITY\", which agrees with the extraction."
+          }
+        },
+        {
+          "extraction_status": "EXTRACTED",
+          "reasoning": null,
+          "citations": [
+            "/page/0/Diagram/2"
+          ],
+          "verification": {
+            "status": "PASS",
+            "feedback": "The benefit is 'VITALIZED HAIR', which matches the label in the diagram at /page/0/Diagram/2.\n\nPASS:\nConclusion: \"VITALIZED HAIR\", which agrees with the extraction."
+          }
+        },
+        {
+          "extraction_status": "EXTRACTED",
+          "reasoning": null,
+          "citations": [
+            "/page/0/Diagram/2"
+          ],
+          "verification": {
+            "status": "PASS",
+            "feedback": "The benefit is 'ENHANCED SKIN', which matches the label in the diagram at /page/0/Diagram/2.\n\nPASS:\nConclusion: \"ENHANCED SKIN\", which agrees with the extraction."
+          }
+        },
+        {
+          "extraction_status": "EXTRACTED",
+          "reasoning": null,
+          "citations": [
+            "/page/0/Diagram/2"
+          ],
+          "verification": {
+            "status": "PASS",
+            "feedback": "The benefit is 'COMBATTED BLOATING', which matches the label in the diagram at /page/0/Diagram/2.\n\nPASS:\nConclusion: \"COMBATTED BLOATING\", which agrees with the extraction."
+          }
+        },
+        {
+          "extraction_status": "EXTRACTED",
+          "reasoning": null,
+          "citations": [
+            "/page/0/Diagram/2"
+          ],
+          "verification": {
+            "status": "PASS",
+            "feedback": "The benefit is 'THOUSANDS MORE WHOLE BODY BENEFITS', which matches the label 'AND THOUSANDS MORE WHOLE BODY BENEFITS' in the diagram at /page/0/Diagram/2.\n\nPASS:\nConclusion: \"THOUSANDS MORE WHOLE BODY BENEFITS\", which agrees with the extraction."
+          }
+        }
+      ],
+      "verification": {
+        "status": "PASS",
+        "feedback": "The extraction contains 5 items in this list, which matches the 5 benefit labels shown in the diagram at /page/0/Diagram/2.\n\nPASS:\nConclusion: 5 items, which agrees with the extraction."
+      }
+    },
+    "cta_present": false,
+    "cta_present_citations": [
+      "/page/0/Text/0",
+      "/page/0/SectionHeader/1",
+      "/page/0/Text/3"
+    ],
+    "cta_present_meta": {
+      "extraction_status": "EXTRACTED",
+      "reasoning": null,
+      "citations": [
+        "/page/0/Text/0",
+        "/page/0/SectionHeader/1",
+        "/page/0/Text/3"
+      ],
+      "verification": {
+        "status": "PASS",
+        "feedback": "The value is false, as there is no explicit call-to-action text in the document.\n\nPASS:\nConclusion: false, which agrees with the extraction."
+      }
+    }
+  }
+}

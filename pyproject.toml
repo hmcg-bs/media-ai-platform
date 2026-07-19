@@ -1,0 +1,52 @@
+[project]
+name = "social-media-analysis-agent"
+version = "0.1.0"
+description = "GCP serverless agent that extracts structured creative features from ad images and mines performance patterns"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Avinaash Padman", email = "avinaashpadman96@gmail.com"}
+]
+requires-python = ">=3.12,<3.13"
+
+dependencies = [
+    # Cognitive layer — Vertex AI via the Gen AI SDK
+    "google-genai>=1.0.0",
+    # Deterministic vision
+    "google-cloud-vision>=3.7.0",
+    "opencv-python>=4.9.0",
+    "pillow>=10.0.0",
+    "numpy>=1.26.0",
+    # Schema, config, logging, retries
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.2.0",
+    "structlog>=24.1.0",
+    "tenacity>=8.3.0",
+    "python-pptx>=1.0.2",
+    "psd-tools>=1.17.4",
+    "apify-client>=3.0.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-mock>=3.12.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["pipeline/tests"]
+python_files = "test_*.py"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_configs = true
+ignore_missing_imports = true

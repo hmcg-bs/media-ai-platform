@@ -1,0 +1,313 @@
+{
+  "children": [
+    {
+      "id": "/page/0/Page/0",
+      "block_type": "Page",
+      "html": "<p style=\"color: #2D3E33; text-align: center;\">FACT</p><img alt=\"Diagram showing a scoop of Armra Colostrum powder with lines pointing to various benefits.\" src=\"52218820ae0a5a10bb2d604859f803e7_img.jpg\"/><div class=\"img-description\" style=\"border: 1px solid #ccc; padding: 10px;\"><p style=\"color: #2D3E33;\">STRENGTHENED<br/>IMMUNITY</p><p style=\"color: #2D3E33;\">VITALIZED<br/>HAIR</p><p style=\"color: #2D3E33;\">ENHANCED<br/>SKIN</p><p style=\"color: #2D3E33;\">COMBATTED<br/>BLOATING</p><p style=\"color: #2D3E33;\">AND THOUSANDS<br/>MORE WHOLE BODY<br/>BENEFITS</p><div class=\"img-alt\">Diagram showing a scoop of Armra Colostrum powder with lines pointing to various benefits.</div></div><p style=\"color: #2D3E33; text-align: center;\"><b style=\"color: #2D3E33;\">ARM\u042fA</b>\u2122<br/>COLOSTRUM</p><img alt=\"A hand holding a scoop of white powder over a pile of the same powder.\" src=\"5fb340ad68b0c71df0b56698b137e35b_img.jpg\"/><div class=\"img-description\" style=\"border: 1px solid #ccc; padding: 10px;\"><p style=\"color: #000000; display: none;\">A close-up photograph of a person's hand holding a white plastic scoop filled with a fine, white powder. The background is a soft-focus image of a large pile of the same white powder. The image is partially cut off on the right side.</p><div class=\"img-alt\">A hand holding a scoop of white powder over a pile of the same powder.</div></div>",
+      "page": 0,
+      "bbox": [
+        0.0,
+        0.0,
+        1540.0,
+        2744.0
+      ],
+      "polygon": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          1540.0,
+          0.0
+        ],
+        [
+          1540.0,
+          2744.0
+        ],
+        [
+          0.0,
+          2744.0
+        ]
+      ],
+      "section_hierarchy": {},
+      "images": {},
+      "markdown": null,
+      "inference_failed": false,
+      "metadata": null,
+      "children": [
+        {
+          "id": "/page/0/Text/0",
+          "block_type": "Text",
+          "html": "<p style=\"color: #2D3E33; text-align: center;\">FACT</p>",
+          "page": 0,
+          "bbox": [
+            679.14,
+            510.384,
+            853.16,
+            578.984
+          ],
+          "polygon": [
+            [
+              679.14,
+              510.384
+            ],
+            [
+              853.16,
+              510.384
+            ],
+            [
+              853.16,
+              578.984
+            ],
+            [
+              679.14,
+              578.984
+            ]
+          ],
+          "section_hierarchy": {},
+          "images": {},
+          "markdown": null,
+          "inference_failed": false,
+          "metadata": null,
+          "children": [],
+          "text_runs": [
+            {
+              "text": "FACT",
+              "tag": "p",
+              "block_id": "/page/0/Text/0",
+              "style": {
+                "color_reported": "#2D3E33",
+                "color_measured": "#464C30",
+                "text_align": "center",
+                "bold": false,
+                "italic": false,
+                "font_size_canvas_px": 68.6,
+                "font_size_pct_canvas": 2.5
+              }
+            }
+          ],
+          "image_alt": null,
+          "image_description": null
+        },
+        {
+          "id": "/page/0/Diagram/2",
+          "block_type": "Figure",
+          "html": "<img alt=\"Diagram showing a scoop of Armra Colostrum powder with lines pointing to various benefits.\" src=\"52218820ae0a5a10bb2d604859f803e7_img.jpg\"/><div class=\"img-description\" style=\"border: 1px solid #ccc; padding: 10px;\"><p style=\"color: #2D3E33;\">STRENGTHENED<br/>IMMUNITY</p><p style=\"color: #2D3E33;\">VITALIZED<br/>HAIR</p><p style=\"color: #2D3E33;\">ENHANCED<br/>SKIN</p><p style=\"color: #2D3E33;\">COMBATTED<br/>BLOATING</p><p style=\"color: #2D3E33;\">AND THOUSANDS<br/>MORE WHOLE BODY<br/>BENEFITS</p><div class=\"img-alt\">Diagram showing a scoop of Armra Colostrum powder with lines pointing to various benefits.</div></div>",
+          "page": 0,
+          "bbox": [
+            224.84,
+            1122.296,
+            984.06,
+            2071.72
+          ],
+          "polygon": [
+            [
+              224.84,
+              1122.296
+            ],
+            [
+              984.06,
+              1122.296
+            ],
+            [
+              984.06,
+              2071.72
+            ],
+            [
+              224.84,
+              2071.72
+            ]
+          ],
+          "section_hierarchy": {},
+          "images": {
+            "52218820ae0a5a10bb2d604859f803e7_img.jpg": "<base64 JPEG, 68724 chars>"
+          },
+          "markdown": null,
+          "inference_failed": false,
+          "metadata": null,
+          "children": [],
+          "text_runs": [
+            {
+              "text": "STRENGTHENED\nIMMUNITY",
+              "tag": "p",
+              "block_id": "/page/0/Diagram/2",
+              "style": {
+                "color_reported": "#2D3E33",
+                "color_measured": null,
+                "text_align": null,
+                "bold": false,
+                "italic": false,
+                "font_size_canvas_px": null,
+                "font_size_pct_canvas": null
+              }
+            },
+            {
+              "text": "VITALIZED\nHAIR",
+              "tag": "p",
+              "block_id": "/page/0/Diagram/2",
+              "style": {
+                "color_reported": "#2D3E33",
+                "color_measured": null,
+                "text_align": null,
+                "bold": false,
+                "italic": false,
+                "font_size_canvas_px": null,
+                "font_size_pct_canvas": null
+              }
+            },
+            {
+              "text": "ENHANCED\nSKIN",
+              "tag": "p",
+              "block_id": "/page/0/Diagram/2",
+              "style": {
+                "color_reported": "#2D3E33",
+                "color_measured": null,
+                "text_align": null,
+                "bold": false,
+                "italic": false,
+                "font_size_canvas_px": null,
+                "font_size_pct_canvas": null
+              }
+            },
+            {
+              "text": "COMBATTED\nBLOATING",
+              "tag": "p",
+              "block_id": "/page/0/Diagram/2",
+              "style": {
+                "color_reported": "#2D3E33",
+                "color_measured": null,
+                "text_align": null,
+                "bold": false,
+                "italic": false,
+                "font_size_canvas_px": null,
+                "font_size_pct_canvas": null
+              }
+            },
+            {
+              "text": "AND THOUSANDS\nMORE WHOLE BODY\nBENEFITS",
+              "tag": "p",
+              "block_id": "/page/0/Diagram/2",
+              "style": {
+                "color_reported": "#2D3E33",
+                "color_measured": null,
+                "text_align": null,
+                "bold": false,
+                "italic": false,
+                "font_size_canvas_px": null,
+                "font_size_pct_canvas": null
+              }
+            }
+          ],
+          "image_alt": "Diagram showing a scoop of Armra Colostrum powder with lines pointing to various benefits.",
+          "image_description": null
+        },
+        {
+          "id": "/page/0/Text/3",
+          "block_type": "Text",
+          "html": "<p style=\"color: #2D3E33; text-align: center;\"><b style=\"color: #2D3E33;\">ARM\u042fA</b>\u2122<br/>COLOSTRUM</p>",
+          "page": 0,
+          "bbox": [
+            543.62,
+            2197.944,
+            984.06,
+            2370.816
+          ],
+          "polygon": [
+            [
+              543.62,
+              2197.944
+            ],
+            [
+              984.06,
+              2197.944
+            ],
+            [
+              984.06,
+              2370.816
+            ],
+            [
+              543.62,
+              2370.816
+            ]
+          ],
+          "section_hierarchy": {},
+          "images": {},
+          "markdown": null,
+          "inference_failed": false,
+          "metadata": null,
+          "children": [],
+          "text_runs": [
+            {
+              "text": "ARM\u042fA\u2122\nCOLOSTRUM",
+              "tag": "p",
+              "block_id": "/page/0/Text/3",
+              "style": {
+                "color_reported": "#2D3E33",
+                "color_measured": "#383C32",
+                "text_align": "center",
+                "bold": true,
+                "italic": false,
+                "font_size_canvas_px": 86.4,
+                "font_size_pct_canvas": 3.15
+              }
+            }
+          ],
+          "image_alt": null,
+          "image_description": null
+        },
+        {
+          "id": "/page/0/Picture/4",
+          "block_type": "Picture",
+          "html": "<img alt=\"A hand holding a scoop of white powder over a pile of the same powder.\" src=\"5fb340ad68b0c71df0b56698b137e35b_img.jpg\"/><div class=\"img-description\" style=\"border: 1px solid #ccc; padding: 10px;\"><p style=\"color: #000000; display: none;\">A close-up photograph of a person's hand holding a white plastic scoop filled with a fine, white powder. The background is a soft-focus image of a large pile of the same white powder. The image is partially cut off on the right side.</p><div class=\"img-alt\">A hand holding a scoop of white powder over a pile of the same powder.</div></div>",
+          "page": 0,
+          "bbox": [
+            960.96,
+            949.424,
+            1540.0,
+            2321.424
+          ],
+          "polygon": [
+            [
+              960.96,
+              949.424
+            ],
+            [
+              1540.0,
+              949.424
+            ],
+            [
+              1540.0,
+              2321.424
+            ],
+            [
+              960.96,
+              2321.424
+            ]
+          ],
+          "section_hierarchy": {},
+          "images": {
+            "5fb340ad68b0c71df0b56698b137e35b_img.jpg": "<base64 JPEG, 99436 chars>"
+          },
+          "markdown": null,
+          "inference_failed": false,
+          "metadata": null,
+          "children": [],
+          "text_runs": [],
+          "image_alt": "A hand holding a scoop of white powder over a pile of the same powder.",
+          "image_description": "A close-up photograph of a person's hand holding a white plastic scoop filled with a fine, white powder. The background is a soft-focus image of a large pile of the same white powder. The image is partially cut off on the right side."
+        }
+      ],
+      "text_runs": [],
+      "image_alt": null,
+      "image_description": null
+    }
+  ],
+  "metadata": {
+    "page_stats": [
+      {
+        "page_id": 0,
+        "num_blocks": 5
+      }
+    ]
+  }
+}
