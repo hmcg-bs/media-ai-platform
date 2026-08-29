@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ─── Enums ────────────────────────────────────────────────────────────
 
@@ -199,7 +199,20 @@ class MarketingPsychology(BaseModel):
     primary_value_proposition: str = ""
     authority_flags: list[str] = Field(default_factory=list)
     emoji_count: int = 0
+    # The unconstrained Replicate prompt path (no real JSON-schema enforcement,
+    # just an English instruction) returns this in genuinely unpredictable
+    # shapes confirmed live: bare numbers (7, 8, 0), "Grade 5", "N/A", "6th
+    # Grade". This field is otherwise unused downstream (flatten_features reads
+    # the deterministic CopywritingFeatures.reading_grade_level instead), so a
+    # type mismatch here was invalidating the whole cheap-tier response —
+    # including hook_framework — over a field nothing consumes. Coerced to str
+    # before validation so no shape Gemini emits can ever fail this field.
     reading_grade_level: str = ""
+
+    @field_validator("reading_grade_level", mode="before")
+    @classmethod
+    def _coerce_reading_grade_level(cls, v: object) -> str:
+        return "" if v is None else str(v)
 
 
 # ─── Top-level document ───────────────────────────────────────────────

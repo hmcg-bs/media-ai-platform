@@ -6,6 +6,8 @@ import json
 
 from unittest.mock import patch
 
+import httpx
+
 from ingestion.landing_page_scraper import (
     extract_from_json_ld,
     extract_from_og_tags,
@@ -13,7 +15,21 @@ from ingestion.landing_page_scraper import (
     extract_og_tags,
     extract_product_page,
     extract_structured_data,
+    resolve_and_scrape,
+    scrape_landing_page,
 )
+from ingestion.rate_limiter import DomainRateLimiterRegistry
+from pipeline.config import Settings
+
+
+def _fast_registry() -> DomainRateLimiterRegistry:
+    return DomainRateLimiterRegistry(
+        global_rate=1000.0, global_capacity=1000.0, per_domain_rate=1000.0, per_domain_capacity=1000.0
+    )
+
+
+def _fast_settings() -> Settings:
+    return Settings(scrape_max_attempts=3, scrape_backoff_min_seconds=0.01, scrape_backoff_max_seconds=0.02)
 
 
 class TestExtractJsonLd:
@@ -228,4 +244,138 @@ class TestExtractProductPageOrchestration:
         """Test returns None if structured extraction fails."""
         html = "<html><body>No product data</body></html>"
         result = extract_product_page("https://example.com", html, use_llm_enrichment=True)
+        assert result is None
+
+
+class TestScrapeLandingPageHardening:
+    """Tests for the httpx-based scrape_landing_page: headers, retry/backoff,
+    rate limiter integration. Added alongside the Shopify JSON tiered
+    scraper — see ingestion/rate_limiter.py for why 403 is retryable here
+    (deliberately different from replicate_client.py's convention)."""
+
+    def test_sends_configured_user_agent(self) -> None:
+        captured: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["user_agent"] = request.headers.get("user-agent", "")
+            return httpx.Response(200, text="<html>ok</html>")
+
+        client = httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
+        with patch("ingestion.landing_page_scraper.get_settings", return_value=_fast_settings()):
+            result = scrape_landing_page("https://example.com/product", client=client)
+
+        assert result == "<html>ok</html>"
+        assert "Mozilla" in captured["user_agent"] or captured["user_agent"] != ""
+
+    def test_retries_on_429_then_succeeds(self) -> None:
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return httpx.Response(429)
+            return httpx.Response(200, text="<html>recovered</html>")
+
+        client = httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
+        with patch("ingestion.landing_page_scraper.get_settings", return_value=_fast_settings()):
+            result = scrape_landing_page("https://flaky.example.com/product", client=client)
+
+        assert result == "<html>recovered</html>"
+        assert call_count == 2
+
+    def test_retries_on_403_then_succeeds(self) -> None:
+        """403 is retryable here (unlike replicate_client.py's convention) —
+        confirmed empirically that our 403s were part of the same
+        burst-triggered block as the 429s, not a permanent auth failure."""
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return httpx.Response(403)
+            return httpx.Response(200, text="<html>recovered</html>")
+
+        client = httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
+        with patch("ingestion.landing_page_scraper.get_settings", return_value=_fast_settings()):
+            result = scrape_landing_page("https://flaky.example.com/product", client=client)
+
+        assert result == "<html>recovered</html>"
+        assert call_count == 2
+
+    def test_gives_up_after_max_attempts_on_persistent_429(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(429)
+
+        client = httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
+        with patch(
+            "ingestion.landing_page_scraper.get_settings",
+            return_value=Settings(scrape_max_attempts=2, scrape_backoff_min_seconds=0.01, scrape_backoff_max_seconds=0.02),
+        ):
+            result = scrape_landing_page("https://always-throttled.example.com/product", client=client)
+
+        assert result is None
+
+    def test_404_not_retried(self) -> None:
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(404)
+
+        client = httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
+        with patch("ingestion.landing_page_scraper.get_settings", return_value=_fast_settings()):
+            result = scrape_landing_page("https://example.com/missing", client=client)
+
+        assert result is None
+        assert call_count == 1
+
+    def test_rate_limiter_acquired_before_request_and_recorded_on_response(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, text="<html>ok</html>", headers={"X-ShopId": "1"})
+
+        client = httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
+        registry = _fast_registry()
+        with patch.object(registry, "acquire", wraps=registry.acquire) as spy_acquire, patch.object(
+            registry, "record_response", wraps=registry.record_response
+        ) as spy_record:
+            with patch("ingestion.landing_page_scraper.get_settings", return_value=_fast_settings()):
+                scrape_landing_page(
+                    "https://example.com/product", client=client, rate_limiter=registry
+                )
+            spy_acquire.assert_called_once_with("example.com")
+            spy_record.assert_called_once()
+
+    def test_invalid_url_returns_none_without_request(self) -> None:
+        result = scrape_landing_page("not-a-url")
+        assert result is None
+
+
+class TestResolveAndScrape:
+    def test_returns_final_url_after_redirect(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            url = str(request.url)
+            if url == "https://tracker.example.com/click/1":
+                return httpx.Response(302, headers={"Location": "https://store.com/products/handle"})
+            return httpx.Response(200, text="<html>landing</html>")
+
+        client = httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
+        with patch("ingestion.landing_page_scraper.get_settings", return_value=_fast_settings()):
+            result = resolve_and_scrape("https://tracker.example.com/click/1", client=client)
+
+        assert result is not None
+        final_url, html = result
+        assert final_url == "https://store.com/products/handle"
+        assert html == "<html>landing</html>"
+
+    def test_returns_none_on_failure(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(500)
+
+        client = httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
+        with patch("ingestion.landing_page_scraper.get_settings", return_value=_fast_settings()):
+            result = resolve_and_scrape("https://down.example.com/product", client=client)
+
         assert result is None

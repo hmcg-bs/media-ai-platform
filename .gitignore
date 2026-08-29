@@ -48,6 +48,9 @@ htmlcov/
 # Pipeline output (local extraction JSON)
 out/
 
+# Scraped/intermediate datasets (large JSON, not source-controlled)
+data/
+
 # Creatives: ignore actual images + outputs (may be proprietary), keep folders
 creatives/input/*
 creatives/output/*

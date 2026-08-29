@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from pipeline.config import get_settings
@@ -87,21 +88,74 @@ def write_embeddings(context: PipelineContext, out_dir: Path) -> None:
     logger.info("embeddings_written", ad_id=context.ad_id, dim=emb.dim)
 
 
-def run_one(image_path: Path, stages: list[BaseStage]) -> PipelineContext:
-    """Run all stages on a single image with per-stage fallback."""
-    context = PipelineContext(ad_id=image_path.stem, image_path=str(image_path))
-    for stage in stages:
-        try:
-            context = stage.process(context)
-        except StageError as exc:
-            logger.error(
-                "stage_failed",
-                stage=stage.name,
-                ad_id=context.ad_id,
-                error_type=type(exc.original).__name__ if exc.original else "StageError",
-                error_msg=str(exc),
-            )
-            context.failed_stages.append(stage.name)
+def _run_stage(stage: BaseStage, context: PipelineContext) -> None:
+    """Run one stage in place, recording (not raising) a StageError."""
+    try:
+        stage.process(context)
+    except StageError as exc:
+        logger.error(
+            "stage_failed",
+            stage=stage.name,
+            ad_id=context.ad_id,
+            error_type=type(exc.original).__name__ if exc.original else "StageError",
+            error_msg=str(exc),
+        )
+        context.failed_stages.append(stage.name)
+
+
+def run_one(
+    image_path: Path, stages: list[BaseStage], image_bytes: bytes | None = None
+) -> PipelineContext:
+    """Run all stages on a single image with per-stage fallback.
+
+    ``image_bytes``, when provided, is set on the context up front so every
+    stage (all of which operate on ``context.image_bytes`` directly, not
+    ``image_path`` — only Stage 1's fallback reads the path) skips its own
+    file I/O. Lets a caller fetch bytes in memory (e.g. from a remote URL)
+    without ever writing an image to disk; ``image_path`` still supplies
+    ``ad_id`` via its stem and is kept for logging/bookkeeping only in that
+    case, never opened.
+
+    CognitiveStage (Stage 5), when present, runs concurrently with every
+    stage before it rather than waiting for that chain to finish first. The
+    OCR->Color dependency (Color masks out OCR's text boxes before k-means —
+    see stage_03_color.py) means that chain must stay sequential internally,
+    but nothing in it touches marketing_psychology/spatial_and_nested_objects/
+    human_model_analysis, the only fields CognitiveStage writes — confirmed
+    disjoint, so running them as two threads over the same mutable context is
+    safe. This is the dominant lever for per-ad latency: Stage 5's two Gemini
+    calls alone average ~18-19s, versus ~3-5s for the whole pre-chain.
+    """
+    context = PipelineContext(
+        ad_id=image_path.stem, image_path=str(image_path), image_bytes=image_bytes
+    )
+
+    cognitive_idx = next(
+        (i for i, s in enumerate(stages) if isinstance(s, CognitiveStage)), None
+    )
+
+    if cognitive_idx is None:
+        for stage in stages:
+            _run_stage(stage, context)
+        return context
+
+    pre_stages = stages[:cognitive_idx]
+    cognitive_stage = stages[cognitive_idx]
+    post_stages = stages[cognitive_idx + 1 :]
+
+    def run_chain() -> None:
+        for stage in pre_stages:
+            _run_stage(stage, context)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        chain_future = pool.submit(run_chain)
+        cognitive_future = pool.submit(_run_stage, cognitive_stage, context)
+        chain_future.result()
+        cognitive_future.result()
+
+    for stage in post_stages:
+        _run_stage(stage, context)
+
     return context
 
 

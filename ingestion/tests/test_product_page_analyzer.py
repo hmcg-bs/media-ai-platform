@@ -129,6 +129,62 @@ def test_extract_semantic_preserves_structured_fields() -> None:
     assert enriched.marketing_copy == "High-quality creatine"
 
 
+def test_extract_semantic_preserves_prior_tier_variants_and_price_range() -> None:
+    """Regression test for the merge-overwrite bug: when a prior tier (e.g.
+    shopify_json's native variants[] parse) already populated
+    variants_featured/price_range/shows_all_variants, and the LLM's own pass
+    returns nothing for those fields, the prior tier's correct data must
+    survive — not get silently wiped by an unconditional overwrite."""
+    partial_product = ProductPage(
+        product_name="Creatine Monohydrate",
+        variants_featured=["Variant: Chocolate", "Variant: Vanilla"],
+        shows_all_variants=True,
+        price_range="$19.99-$29.99",
+    )
+
+    mock_extraction = SemanticExtraction(
+        product_category="Supplements",
+        # LLM found nothing for variants/price_range/shows_all_variants —
+        # its own pass working from body copy alone often has no reason to
+        # restate flavor/size options already known from structured data.
+    )
+
+    with patch(
+        "ingestion.product_page_analyzer.ReplicateVisionClient.extract_structured_text"
+    ) as mock_llm:
+        mock_llm.return_value = mock_extraction
+
+        enriched = extract_semantic_fields("<html></html>", partial_product)
+
+    assert enriched.variants_featured == ["Variant: Chocolate", "Variant: Vanilla"]
+    assert enriched.shows_all_variants is True
+    assert enriched.price_range == "$19.99-$29.99"
+
+
+def test_extract_semantic_llm_variants_win_when_prior_tier_empty() -> None:
+    """The LLM's value should still be used when the prior tier found
+    nothing — setdefault-style merging, not "prior tier always wins"."""
+    partial_product = ProductPage(product_name="Creatine Monohydrate")
+
+    mock_extraction = SemanticExtraction(
+        product_category="Supplements",
+        variants_featured=["Flavor: Berry"],
+        shows_all_variants=True,
+        price_range="$9.99-$14.99",
+    )
+
+    with patch(
+        "ingestion.product_page_analyzer.ReplicateVisionClient.extract_structured_text"
+    ) as mock_llm:
+        mock_llm.return_value = mock_extraction
+
+        enriched = extract_semantic_fields("<html></html>", partial_product)
+
+    assert enriched.variants_featured == ["Flavor: Berry"]
+    assert enriched.shows_all_variants is True
+    assert enriched.price_range == "$9.99-$14.99"
+
+
 def test_extract_semantic_with_ad_context() -> None:
     """Test LLM extraction includes ad context in prompt."""
     partial_product = ProductPage(

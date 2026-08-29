@@ -12,6 +12,32 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     # Cognitive layer — Vertex AI via the Gen AI SDK
     "google-genai>=1.0.0",
+    # Cognitive layer — Replicate-hosted models (ADR-008)
+    "replicate>=1.0.0",
+    "httpx>=0.27.0",
+    # TLS-impersonating HTTP client — added for a self-hosted anti-bot
+    # approach that was superseded by ZenRows (see ingestion/zenrows_scraper.py)
+    # before implementation; kept in case ZenRows proves insufficient.
+    "curl_cffi>=0.16.0,<0.17",
+    # Managed scraping API (JS rendering + proxy rotation + anti-bot server-side)
+    "zenrows>=1.4.0,<2",
+    "beautifulsoup4>=4.12.0",
+    # Page-level dedup (Phase 0.5e) — HTML-to-Markdown pruning for the Tier 5
+    # LLM fallback prompt budget. MinHash near-duplicate detection is
+    # implemented in-house (ingestion/dedupe.py) rather than via datasketch —
+    # that package's eager import pulls in scipy, which reproduced a
+    # multi-minute macOS Gatekeeper-scanning hang on this machine for a
+    # dependency we only used for one small hashing class.
+    "html2text>=2024.2.26",
+    # Data and ML
+    "google-cloud-bigquery>=3.0.0",
+    "pandas>=2.0.0",
+    "scikit-learn>=1.4.0",
+    "xgboost>=2.0.0",
+    # Censored survival analysis (Cox Proportional Hazards) for days_active --
+    # right-censored by an artifact of the corpus being a single scrape
+    # snapshot, not a genuine per-ad death date for most rows.
+    "lifelines>=0.29.0",
     # Deterministic vision
     "google-cloud-vision>=3.7.0",
     "opencv-python>=4.9.0",
@@ -45,6 +71,16 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# X/y (and X_train/X_test/...) is scikit-learn's own universal naming
+# convention for feature matrix / target vector -- renaming to x/y here
+# would fight every ML reader's expectation, not improve clarity.
+"pipeline/model_training/*.py" = ["N803", "N806"]
+"pipeline/tests/test_model_training_preprocessing.py" = ["N803", "N806"]
+"pipeline/tests/test_success_score.py" = ["N803", "N806"]
+"pipeline/tests/test_trainer.py" = ["N803", "N806"]
+"pipeline/tests/test_survival.py" = ["N803", "N806"]
 
 [tool.mypy]
 python_version = "3.12"

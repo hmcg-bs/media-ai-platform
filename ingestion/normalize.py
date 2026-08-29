@@ -66,14 +66,53 @@ def _image_urls(snapshot: dict[str, Any]) -> list[str]:
 
 
 def _video_urls(snapshot: dict[str, Any]) -> list[str]:
+    """Regression: previously only read snapshot.videos -- confirmed live
+    (a fresh Apify scrape) that a video-carousel ad's video lives under a
+    "cards" entry instead, with video_hd_url/video_sd_url exactly like a
+    top-level videos entry. The old code silently dropped that ad's video
+    entirely (video_urls == [] even though a real video existed)."""
     urls: list[str] = []
-    for item in snapshot.get("videos") or []:
-        if not isinstance(item, dict):
-            continue
-        url = item.get("video_hd_url") or item.get("video_sd_url")
-        if url:
-            urls.append(url)
+    for group in ("videos", "cards"):
+        for item in snapshot.get(group) or []:
+            if not isinstance(item, dict):
+                continue
+            url = item.get("video_hd_url") or item.get("video_sd_url")
+            if url:
+                urls.append(url)
     return urls
+
+
+def _video_preview_image_urls(snapshot: dict[str, Any]) -> list[str]:
+    """Video thumbnail/preview frames -- confirmed live these often carry
+    real overlay text baked into the frame, making them a legitimate
+    fallback creative image for a video-only ad with no static image at
+    all (otherwise that ad has zero usable image data for Step 2's
+    OCR/color/cognitive pipeline, even though a real, analyzable frame
+    exists)."""
+    urls: list[str] = []
+    for group in ("videos", "cards"):
+        for item in snapshot.get(group) or []:
+            if not isinstance(item, dict):
+                continue
+            url = item.get("video_preview_image_url")
+            if url:
+                urls.append(url)
+    return urls
+
+
+def _impressions(raw: dict[str, Any]) -> tuple[str | None, int | None]:
+    """(impressions_text, impressions_index) from raw's impressions_with_index
+    dict. Meta uses -1 as an explicit "not disclosed" sentinel (confirmed
+    live) -- normalized to None here so callers get a real null instead of
+    having to know about this specific magic number."""
+    info = raw.get("impressions_with_index")
+    if not isinstance(info, dict):
+        return None, None
+    text = info.get("impressions_text")
+    index = info.get("impressions_index")
+    if index == -1:
+        index = None
+    return text, index
 
 
 def normalize_ad(raw: dict[str, Any]) -> CompetitorAd:
@@ -88,10 +127,26 @@ def normalize_ad(raw: dict[str, Any]) -> CompetitorAd:
     if isinstance(platforms, str):
         platforms = [platforms]
 
+    impressions_text, impressions_index = _impressions(raw)
+    regional_transparency = raw.get("transparency_by_location")
+    if not isinstance(regional_transparency, dict):
+        regional_transparency = None
+
+    # `raw.get("url")` was checked *before* the constructed fallback, but it
+    # is not a per-ad field at all — it's the Apify actor echoing back its
+    # own scrape input (apify_client.py's constructed ad_library_url, the
+    # same generic search-query URL for every item in a run). Confirmed
+    # live: this actor's real output never populates `ad_snapshot_url`, so
+    # every ad's snapshot_url ended up as that identical generic search URL
+    # — useless as a per-ad link. The constructed `?id={ad_id}` form is
+    # Meta's real, stable, always-correct per-ad Ad Library detail-page
+    # URL (confirmed against the test fixture's own `ad_snapshot_url`
+    # shape) — moved ahead of the `url` fallback so it actually fires.
     snapshot_url = (
         raw.get("ad_snapshot_url")
-        or raw.get("url")
         or (f"https://www.facebook.com/ads/library/?id={ad_id}" if ad_id else "")
+        or raw.get("url")
+        or ""
     )
 
     return CompetitorAd(
@@ -108,9 +163,15 @@ def normalize_ad(raw: dict[str, Any]) -> CompetitorAd:
         caption=snapshot.get("caption") or "",
         link_url=snapshot.get("link_url") or "",
         cta_text=snapshot.get("cta_text") or "",
-        image_urls=_image_urls(snapshot),
+        image_urls=_image_urls(snapshot) or _video_preview_image_urls(snapshot),
         video_urls=_video_urls(snapshot),
         publisher_platforms=[str(p) for p in platforms],
         snapshot_url=snapshot_url,
         ingested_at=datetime.now(tz=UTC).isoformat(),
+        impressions_text=impressions_text,
+        impressions_index=impressions_index,
+        reach_estimate=raw.get("reach_estimate"),
+        spend=raw.get("spend"),
+        gated_type=raw.get("gated_type"),
+        regional_transparency=regional_transparency,
     )

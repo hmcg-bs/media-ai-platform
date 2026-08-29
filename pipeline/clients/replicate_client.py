@@ -1,11 +1,20 @@
-"""Thin, mockable clients for the Replicate-hosted models (ADR-008).
+"""Thin, mockable clients for the Replicate-hosted models (ADR-008, extended
+by wayfinder map #36 for Generation v1).
 
-Four models power the colour-scheme, imagery, retrieval, and cognitive components:
+Five models power the colour-scheme, imagery, retrieval, cognitive, and
+generation components:
 
 - ``QwenLayersClient``    — Qwen-Image-Layered: image → list of RGBA layer PNGs.
 - ``QwenVLClient``        — Qwen3-VL: image + prompt → description string.
 - ``EmbeddingClient``     — embedding-gemma: text → embedding vector.
 - ``ReplicateVisionClient`` — google/gemini-3-flash: image + prompt → structured JSON.
+- ``FluxKontextClient``   — Flux Kontext Pro: image + prompt → faithfully-edited image
+  (product-render element for Generation v1 — see pipeline/generation/).
+- ``BackgroundRemoverClient`` — 851-labs/background-remover: image → RGBA cutout,
+  the alpha-matte source for Round 6's inpaint mask (see pipeline/generation/masking.py).
+- ``FluxFillClient``      — Flux Fill Pro: image + mask + prompt → masked inpaint,
+  replacing FluxKontextClient for the background step so the product's own pixels
+  (including label text) are never touched, never regenerated, never garbled.
 
 Each is constructed lazily and accepts an injected ``run`` callable so tests can mock
 it without network/paid calls. Model ids and the API token come from ``get_settings()``
@@ -42,7 +51,7 @@ _RETRY_STATUS = {429, 500, 502, 503, 504}
 
 
 def _is_retryable(exc: BaseException) -> bool:
-    if isinstance(exc, httpx.TimeoutException):
+    if isinstance(exc, (httpx.TimeoutException, httpx.TransportError)):
         return True
     if isinstance(exc, ReplicateError):
         return getattr(exc, "status", None) in _RETRY_STATUS
@@ -129,6 +138,84 @@ class QwenVLClient(_ReplicateBase):
         return "".join(str(chunk) for chunk in out)
 
 
+class FluxKontextClient(_ReplicateBase):
+    """Flux Kontext Pro (Generation v1, wayfinder map #36): image-conditioned
+    editing that preserves the reference image's subject rather than warping
+    it -- the faithful-product-fidelity tool per docs/meta-ad-image-model-stack.md,
+    a 4th scoped Replicate exception alongside Qwen/embedding-gemma (ADR-008).
+    Real input schema confirmed against Replicate's own API (not assumed):
+    ``prompt`` (required), ``input_image``, ``aspect_ratio``, ``output_format``."""
+
+    def edit(
+        self,
+        image_bytes: bytes,
+        prompt: str,
+        *,
+        aspect_ratio: str = "match_input_image",
+        output_format: str = "png",
+    ) -> bytes:
+        logger.debug("replicate_call", model=self.settings.flux_kontext_model)
+        out = self._execute(
+            self.settings.flux_kontext_model,
+            {
+                "prompt": prompt,
+                "input_image": io.BytesIO(image_bytes),
+                "aspect_ratio": aspect_ratio,
+                "output_format": output_format,
+            },
+        )
+        # A single-image edit model returns one file, not a list -- but
+        # normalize defensively in case a future version starts batching.
+        item = out[0] if isinstance(out, list) else out
+        return _to_bytes(item)
+
+
+class BackgroundRemoverClient(_ReplicateBase):
+    """851-labs/background-remover: image -> RGBA cutout. Round 6's source of
+    the alpha matte that pipeline.generation.masking builds an inpaint mask
+    from -- real input schema confirmed live against Replicate's own API:
+    ``image``, ``format``, ``reverse``, ``threshold``, ``background_type``."""
+
+    def remove_background(self, image_bytes: bytes) -> bytes:
+        logger.debug("replicate_call", model=self.settings.background_remover_model)
+        out = self._execute(
+            self.settings.background_remover_model,
+            {"image": io.BytesIO(image_bytes), "format": "png", "background_type": "rgba"},
+        )
+        item = out[0] if isinstance(out, list) else out
+        return _to_bytes(item)
+
+
+class FluxFillClient(_ReplicateBase):
+    """Flux Fill Pro: masked inpainting -- the mask's black areas are
+    preserved pixel-for-pixel, white areas are regenerated (confirmed via
+    Replicate's own field description, not assumed). Round 6's fix for Flux
+    Kontext's whole-image re-render silently garbling the product's own
+    label text: masking the product region out of the edit means those
+    pixels are never touched, never regenerated, so they can't be garbled."""
+
+    def inpaint(
+        self,
+        image_bytes: bytes,
+        mask_bytes: bytes,
+        prompt: str,
+        *,
+        output_format: str = "png",
+    ) -> bytes:
+        logger.debug("replicate_call", model=self.settings.flux_fill_model)
+        out = self._execute(
+            self.settings.flux_fill_model,
+            {
+                "prompt": prompt,
+                "image": io.BytesIO(image_bytes),
+                "mask": io.BytesIO(mask_bytes),
+                "output_format": output_format,
+            },
+        )
+        item = out[0] if isinstance(out, list) else out
+        return _to_bytes(item)
+
+
 class EmbeddingClient(_ReplicateBase):
     """Embed text with embedding-gemma for retrieval-grounded suggestions."""
 
@@ -169,14 +256,17 @@ class ReplicateVisionClient(_ReplicateBase):
         import base64
 
         logger.debug("replicate_call", model=self.settings.replicate_gemini_model)
-        # Encode image as base64 data URL for Replicate
+        # Encode image as base64 data URL for Replicate.
+        # The model's input schema takes `images` (a plural array, max 10) —
+        # not a singular `image` field. Sending `image` is silently dropped by
+        # the API, so the model receives zero images despite one being sent.
         b64_img = base64.b64encode(image_bytes).decode("utf-8")
         data_url = f"data:image/jpeg;base64,{b64_img}"
 
         out = self._execute(
             self.settings.replicate_gemini_model,
             {
-                "image": data_url,
+                "images": [data_url],
                 "prompt": prompt,
             },
         )

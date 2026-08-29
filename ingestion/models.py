@@ -9,7 +9,9 @@ Stage 4 adds ``product_page`` analysis from landing-page scraping (product categ
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from typing import Any
+
+from pydantic import BaseModel, Field, field_validator
 
 from ingestion.product_page import ProductPage
 
@@ -23,6 +25,38 @@ class CompetitorAd(BaseModel):
     is_active: bool = False
     days_active: int = 0                # Longevity proxy (computed)
     collation_count: int = 0            # active-variant count (Variant proxy)
+
+    # Delivery/scale signals from Meta's own Ad Library transparency data --
+    # populated only for political/social-issue/EU-regulated ads; confirmed
+    # live (a real Apify run against this project's actual US-commercial-ad
+    # search) that these come back None/-1 for ordinary commercial ads, the
+    # kind this corpus is entirely made of. Captured anyway rather than
+    # discarded: the raw scraper output already includes these fields on
+    # every run (scrapeAdDetails=True is already set in apify_client.py),
+    # so dropping them here would silently lose real data the one time an
+    # ad *does* qualify for disclosure (e.g. a future EU-targeted scrape) --
+    # the same bug class as several other fields found this session.
+    impressions_text: str | None = None      # e.g. "10K-50K" when disclosed
+    impressions_index: int | None = None     # Meta's internal bucket index; -1 normalized to None
+    reach_estimate: str | None = None        # shape unconfirmed -- always None in every sample seen
+    spend: str | None = None                 # e.g. "$1K-$5K" when disclosed; shape unconfirmed
+    gated_type: str | None = None            # Meta's disclosure-eligibility flag ("ELIGIBLE" etc.)
+    regional_transparency: dict[str, Any] | None = None  # raw transparency_by_location passthrough
+
+    @field_validator("reach_estimate", "spend", mode="before")
+    @classmethod
+    def _coerce_unconfirmed_shape_to_str(cls, v: Any) -> str | None:
+        """reach_estimate/spend have never been observed populated in this
+        project's own live testing -- their real shape when Meta does
+        disclose a value (numeric? a range string? a nested object?) is
+        unconfirmed. Coerce anything non-None/non-str to a string rather
+        than let an unexpected shape raise a validation error the first
+        time a real value actually appears (same permissive-coercion
+        pattern used for MarketingPsychology.reading_grade_level, which hit
+        exactly this kind of surprise-shape issue)."""
+        if v is None or isinstance(v, str):
+            return v
+        return str(v)
 
     # Copy
     body: str = ""                      # primary ad text

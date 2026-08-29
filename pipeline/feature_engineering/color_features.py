@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import colorsys
+import statistics
 from typing import Any
 
 
@@ -82,6 +84,39 @@ def is_warm_color(hex_color: str | None) -> bool:
 
     # Warm if red component is high and blue is low
     return r > 150 and b < 150
+
+
+def _hex_to_saturation(hex_color: str) -> float | None:
+    hex_color = hex_color.lstrip("#").lower()
+    try:
+        r = int(hex_color[0:2], 16) / 255.0
+        g = int(hex_color[2:4], 16) / 255.0
+        b = int(hex_color[4:6], 16) / 255.0
+    except (ValueError, IndexError):
+        return None
+    _, s, _ = colorsys.rgb_to_hsv(r, g, b)
+    return s
+
+
+def compute_palette_vibrancy(hex_palette: list[str] | None) -> float | None:
+    """Palette vibrancy as the standard deviation of HSV saturation across a
+    creative's dominant color palette — a dull, near-monochrome palette (all
+    colors similarly desaturated) scores near 0; a palette mixing vivid and
+    muted colors scores higher. Not a direct Step 2 output field (Step 2 only
+    produces the raw hex palette) — this is the original Phase 2 spec's own
+    "ADD: palette_vibrancy" derivation, computed here rather than in Step 2
+    itself since it's a pure function of already-extracted hex values, not
+    something that needs another vision-model call.
+
+    Returns None (not 0.0) when there's nothing to compute from, so the
+    caller's own "no data" default applies rather than a derived function
+    silently asserting a specific vibrancy value for an empty palette."""
+    if not hex_palette:
+        return None
+    saturations = [s for s in (_hex_to_saturation(h) for h in hex_palette) if s is not None]
+    if len(saturations) < 2:
+        return None
+    return statistics.stdev(saturations)
 
 
 def extract_color_features(

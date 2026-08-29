@@ -60,7 +60,6 @@ class ColorStage(BaseStage):
 
     def __init__(self, settings=None):
         self.settings = settings or get_settings()
-        self._palette_bgr: list[np.ndarray] = []
 
     def process(self, context: PipelineContext) -> PipelineContext:
         start = time.monotonic()
@@ -88,7 +87,7 @@ class ColorStage(BaseStage):
                 non_text = img.reshape(-1, 3)
 
             # 2. K-Means palette.
-            palette = self._kmeans_palette(non_text)
+            palette, palette_bgr = self._kmeans_palette(non_text)
 
             # 3. Perimeter band -> background.
             perimeter = self._perimeter_pixels(img, self.settings.kmeans_perimeter_pct)
@@ -102,7 +101,7 @@ class ColorStage(BaseStage):
                 background_hex=background_hex,
                 background_style=_classify_background_style(perimeter),
                 dominant_hex_palette=palette,
-                contrast_ratio_type=_classify_contrast(self._palette_bgr),
+                contrast_ratio_type=_classify_contrast(palette_bgr),
             )
             logger.info(
                 "stage_completed",
@@ -115,12 +114,15 @@ class ColorStage(BaseStage):
         except Exception as exc:  # noqa: BLE001
             raise StageError(self.name, "colour analysis failed", exc) from exc
 
-    def _kmeans_palette(self, pixels: np.ndarray) -> list[str]:
+    def _kmeans_palette(self, pixels: np.ndarray) -> tuple[list[str], list[np.ndarray]]:
+        """Returns (hex_palette, bgr_palette) — both derived, kept as local
+        return values (not instance state) so a single ColorStage instance is
+        safe to reuse concurrently across ads (Step 2's across-ad concurrency
+        shares one stage list across worker threads)."""
         data = np.float32(pixels.reshape(-1, 3))
         k = min(self.settings.kmeans_clusters, len(data))
         if k < 1:
-            self._palette_bgr = []
-            return []
+            return [], []
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0)
         _, labels, centers = cv2.kmeans(
             data, k, None, criteria, 3, cv2.KMEANS_PP_CENTERS
@@ -128,8 +130,8 @@ class ColorStage(BaseStage):
         # Order palette by cluster size (most dominant first).
         counts = np.bincount(labels.flatten(), minlength=k)
         order = np.argsort(counts)[::-1]
-        self._palette_bgr = [centers[i] for i in order]
-        return [_bgr_to_hex(centers[i]) for i in order]
+        palette_bgr = [centers[i] for i in order]
+        return [_bgr_to_hex(centers[i]) for i in order], palette_bgr
 
     @staticmethod
     def _perimeter_pixels(img: np.ndarray, pct: float) -> np.ndarray:

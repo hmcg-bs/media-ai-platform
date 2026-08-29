@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stage 5 Cognitive Extraction Validator</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 { font-size: 24px; margin-bottom: 8px; }
+        .header p { font-size: 14px; opacity: 0.9; }
+        .progress-bar {
+            width: 100%; height: 8px; background: rgba(255,255,255,0.3);
+            margin-top: 15px; border-radius: 4px; overflow: hidden;
+        }
+        .progress-fill { height: 100%; background: white; transition: width 0.3s ease; }
+        .content { padding: 30px; min-height: 500px; }
+        .file-input-wrapper { margin-bottom: 20px; }
+        .file-input-wrapper input[type="file"] {
+            padding: 10px; border: 2px solid #d1d5db; border-radius: 6px; width: 100%;
+        }
+        #fileStatus { font-size: 13px; color: #666; margin-top: 8px; }
+        .instructions {
+            background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px;
+            padding: 16px; margin-bottom: 20px; color: #1e40af; font-size: 14px;
+        }
+        .instructions ul { margin-left: 20px; margin-top: 6px; line-height: 1.7; }
+        .ad-card { display: none; }
+        .ad-card.active { display: block; }
+        .ad-index { color: #667eea; font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+        .ad-content {
+            display: flex; gap: 20px; background: #f8f9fa; border-left: 4px solid #667eea;
+            padding: 20px; border-radius: 6px; margin-bottom: 20px;
+        }
+        .ad-image-wrap { flex: 0 0 280px; }
+        .ad-image {
+            width: 100%; border-radius: 8px; border: 1px solid #e5e7eb;
+            display: block; background: #eee; min-height: 140px; object-fit: contain;
+        }
+        .ad-image-missing {
+            display: flex; align-items: center; justify-content: center; height: 200px;
+            color: #999; font-size: 13px; text-align: center; padding: 10px;
+        }
+        .ad-image-nav { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
+        .ad-image-nav button {
+            padding: 4px 10px; font-size: 12px; border: 1px solid #d1d5db;
+            background: white; border-radius: 4px; cursor: pointer;
+        }
+        .ad-image-count { font-size: 12px; color: #666; align-self: center; }
+        .predicted-fields { flex: 1; min-width: 0; }
+        .predicted-field { margin-bottom: 12px; }
+        .predicted-label {
+            font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px;
+            font-weight: 600; margin-bottom: 4px; display: block;
+        }
+        .predicted-value { font-size: 15px; color: #333; word-wrap: break-word; white-space: pre-wrap; }
+        .predicted-value.empty { color: #999; font-style: italic; }
+        .predicted-value.long-text {
+            max-height: 120px; overflow-y: auto; font-size: 13px;
+            background: white; padding: 8px; border-radius: 4px; border: 1px solid #e5e7eb;
+        }
+        .judgment-block {
+            padding: 18px; margin-bottom: 16px; border-radius: 6px; background: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+        .judgment-question { font-size: 15px; font-weight: 600; color: #333; margin-bottom: 12px; }
+        .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .btn {
+            padding: 10px 20px; font-size: 14px; font-weight: 600; border: none;
+            border-radius: 6px; cursor: pointer; transition: all 0.2s ease;
+        }
+        .btn-yes { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; }
+        .btn-no { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; }
+        .btn-choice { background: white; border: 2px solid #d1d5db; color: #333; }
+        .btn-choice.selected { border-color: #667eea; background: #eef0ff; }
+        .btn-yes.selected, .btn-no.selected { box-shadow: 0 0 0 3px rgba(102,126,234,0.4); transform: scale(1.03); }
+        .btn:hover { transform: translateY(-1px); }
+        .model-count-row { margin-top: 12px; display: none; align-items: center; gap: 10px; }
+        .model-count-row.visible { display: flex; }
+        .model-count-row input {
+            width: 70px; padding: 6px 10px; font-size: 14px; border: 1px solid #d1d5db;
+            border-radius: 4px;
+        }
+        .navigation { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+        .btn-nav {
+            padding: 10px 30px; background: #e5e7eb; color: #333; border: none;
+            border-radius: 6px; cursor: pointer; font-weight: 600;
+        }
+        .btn-nav:disabled { opacity: 0.5; cursor: not-allowed; }
+        .footer {
+            background: #f8f9fa; padding: 20px 30px; border-top: 1px solid #e5e7eb;
+            display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;
+        }
+        .btn-export { padding: 12px 30px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        .btn-reset { padding: 12px 30px; background: #f3f4f6; color: #333; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        .stats { font-size: 14px; color: #666; text-align: center; margin-top: 12px; }
+        .empty-state { text-align: center; padding: 60px 20px; color: #666; }
+        .status-message { text-align: center; font-size: 13px; margin-top: 10px; min-height: 18px; }
+        .status-message.success { color: #059669; }
+        .status-message.error { color: #dc2626; }
+        .notes-field { margin-top: 8px; }
+        .notes-field textarea {
+            width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px;
+            font-size: 13px; resize: vertical; min-height: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Stage 5 Cognitive Extraction Validator</h1>
+            <p>OCR headline &middot; hook_framework &middot; human_presence / model_count</p>
+            <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        </div>
+        <div class="content">
+            <div class="instructions">
+                <strong>Load <code>data/cognitive_golden_set.json</code></strong> (built via
+                <code>python -m pipeline.validation.cognitive_validator sample</code>).
+                <ul>
+                    <li>Judge each field against what you actually see in the image.</li>
+                    <li>Progress auto-saves in this browser (localStorage) — safe to close and resume.</li>
+                    <li>When done, click <strong>Download Results</strong> and save over
+                        <code>data/cognitive_golden_set.json</code>, then run
+                        <code>python -m pipeline.validation.cognitive_validator evaluate</code>.</li>
+                </ul>
+            </div>
+            <div class="file-input-wrapper">
+                <input type="file" id="fileInput" accept=".json">
+                <div id="fileStatus"></div>
+            </div>
+            <div id="adContainer"></div>
+            <div id="emptyState" class="empty-state">
+                <h2>No golden set loaded</h2>
+                <p>Choose the JSON file above to begin.</p>
+            </div>
+            <div class="navigation" id="navigation" style="display:none">
+                <button class="btn-nav" id="prevBtn" onclick="previousAd()">&larr; Previous</button>
+                <button class="btn-nav" id="nextBtn" onclick="nextAd()">Next &rarr;</button>
+            </div>
+        </div>
+        <div class="footer" id="footer" style="display:none">
+            <button class="btn-export" onclick="downloadResults()">💾 Download Results</button>
+            <button class="btn-reset" onclick="resetProgress()">🔄 Reset Progress</button>
+        </div>
+        <div class="stats" id="stats"></div>
+        <div class="status-message" id="statusMessage"></div>
+    </div>
+
+    <script>
+        const HOOK_CATEGORIES = ["Unknown", "Direct Offer", "Social Proof", "Before/After", "PAS", "Testimonial", "AIDA"];
+
+        let goldenSet = [];
+        let currentIndex = 0;
+
+        const fileInput = document.getElementById('fileInput');
+        fileInput.addEventListener('change', handleFileSelect);
+
+        document.addEventListener('keydown', (e) => {
+            if (!goldenSet.length) return;
+            if (e.key === 'ArrowLeft') { previousAd(); e.preventDefault(); }
+            else if (e.key === 'ArrowRight') { nextAd(); e.preventDefault(); }
+        });
+
+        const LABEL_FIELDS = [
+            'expected_headline_correct', 'expected_hook_framework',
+            'expected_human_presence', 'expected_model_count', 'notes',
+        ];
+
+        function loadSavedLabels() {
+            // {ad_id: {label_field: value}} -- deliberately excludes
+            // image_data_uri and every predicted_* field, so this stays
+            // tiny (well within localStorage's ~5-10MB per-origin quota)
+            // no matter how large the embedded images are.
+            try {
+                return JSON.parse(localStorage.getItem('cognitiveLabelsByAdId') || '{}');
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    goldenSet = JSON.parse(e.target.result);
+                    const savedByAdId = loadSavedLabels();
+                    goldenSet.forEach(entry => {
+                        const saved = savedByAdId[entry.ad_id];
+                        if (saved) Object.assign(entry, saved);
+                    });
+                    currentIndex = parseInt(localStorage.getItem('cognitiveCurrentIndex')) || 0;
+                    if (currentIndex >= goldenSet.length) currentIndex = 0;
+                    if (!goldenSet.length) {
+                        showStatus('No entries found in file', 'error');
+                        return;
+                    }
+                    showStatus(`Loaded ${goldenSet.length} ads`, 'success');
+                    document.getElementById('fileStatus').textContent = `✅ Loaded ${goldenSet.length} ads`;
+                    document.getElementById('emptyState').style.display = 'none';
+                    document.getElementById('navigation').style.display = 'flex';
+                    document.getElementById('footer').style.display = 'flex';
+                    renderAds();
+                    showCurrentAd();
+                } catch (error) {
+                    showStatus('Error parsing JSON: ' + error.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function renderAds() {
+            const container = document.getElementById('adContainer');
+            container.innerHTML = goldenSet.map((entry, index) => {
+                const dataUri = entry.image_data_uri || '';
+                const hasImage = dataUri.length > 0;
+                const headline = entry.predicted_headline || '';
+
+                return `
+                <div class="ad-card" data-index="${index}">
+                    <div class="ad-index">Ad ${index + 1} of ${goldenSet.length} &middot; ${escapeHtml(entry.ad_id)}</div>
+                    <div class="ad-content">
+                        <div class="ad-image-wrap">
+                            ${hasImage ? `
+                                <img class="ad-image" id="img-${index}" src="${dataUri}"
+                                     alt="Ad creative" loading="lazy"
+                                     onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{className:'ad-image-missing',textContent:'⚠️ Image failed to render'}));">
+                            ` : `<div class="ad-image-missing">No image available</div>`}
+                        </div>
+                        <div class="predicted-fields">
+                            ${entry.ad_title ? `
+                            <div class="predicted-field">
+                                <span class="predicted-label">Ad title (Facebook post copy, not image text)</span>
+                                <div class="predicted-value">${escapeHtml(entry.ad_title)}</div>
+                            </div>` : ''}
+                            ${entry.ad_body ? `
+                            <div class="predicted-field">
+                                <span class="predicted-label">Ad body copy</span>
+                                <div class="predicted-value long-text">${escapeHtml(entry.ad_body)}</div>
+                            </div>` : ''}
+                            ${entry.ad_caption ? `
+                            <div class="predicted-field">
+                                <span class="predicted-label">Ad caption / link</span>
+                                <div class="predicted-value">${escapeHtml(entry.ad_caption)}</div>
+                            </div>` : ''}
+                            <div class="predicted-field">
+                                <span class="predicted-label">Extracted headline (from image OCR)</span>
+                                <div class="predicted-value ${headline ? '' : 'empty'}">${headline ? escapeHtml(headline) : '(none detected)'}</div>
+                            </div>
+                            ${(entry.predicted_secondary_copy || []).length ? `
+                            <div class="predicted-field">
+                                <span class="predicted-label">Other text detected in image</span>
+                                <div class="predicted-value long-text">${escapeHtml((entry.predicted_secondary_copy || []).join(' · '))}</div>
+                            </div>` : ''}
+                            <div class="predicted-field">
+                                <span class="predicted-label">Predicted hook framework</span>
+                                <div class="predicted-value">${escapeHtml(entry.predicted_hook_framework || 'Unknown')}</div>
+                            </div>
+                            <div class="predicted-field">
+                                <span class="predicted-label">Predicted human presence / count</span>
+                                <div class="predicted-value">${entry.predicted_human_presence ? 'Yes' : 'No'} / ${entry.predicted_model_count ?? 0}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="judgment-block">
+                        <div class="judgment-question">Is the extracted headline above the ad's real visual headline?</div>
+                        <div class="btn-row">
+                            <button class="btn btn-yes" data-field="headline" data-value="true" onclick="setJudgment(${index}, 'expected_headline_correct', true)">✅ Correct</button>
+                            <button class="btn btn-no" data-field="headline" data-value="false" onclick="setJudgment(${index}, 'expected_headline_correct', false)">❌ Wrong / Missed</button>
+                        </div>
+                    </div>
+
+                    <div class="judgment-block">
+                        <div class="judgment-question">What's the ad's real marketing hook framework?</div>
+                        <div class="btn-row" id="hook-choices-${index}">
+                            ${HOOK_CATEGORIES.map(cat => `
+                                <button class="btn btn-choice" data-field="hook" data-value="${escapeHtml(cat)}" onclick="setJudgment(${index}, 'expected_hook_framework', '${escapeHtml(cat)}')">${escapeHtml(cat)}</button>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="judgment-block">
+                        <div class="judgment-question">Is a human/model actually present in the image?</div>
+                        <div class="btn-row">
+                            <button class="btn btn-yes" data-field="presence" data-value="true" onclick="setHumanPresence(${index}, true)">✅ Yes</button>
+                            <button class="btn btn-no" data-field="presence" data-value="false" onclick="setHumanPresence(${index}, false)">❌ No</button>
+                        </div>
+                        <div class="model-count-row" id="model-count-row-${index}">
+                            <label>How many?</label>
+                            <input type="number" min="0" id="model-count-${index}"
+                                   value="${entry.expected_model_count ?? ''}"
+                                   onchange="setJudgment(${index}, 'expected_model_count', parseInt(this.value) || 0)">
+                        </div>
+                    </div>
+
+                    <div class="notes-field">
+                        <span class="predicted-label">Notes (optional)</span>
+                        <textarea onchange="setNotes(${index}, this.value)">${escapeHtml(entry.notes || '')}</textarea>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function showCurrentAd() {
+            document.querySelectorAll('.ad-card').forEach(card => card.classList.remove('active'));
+            const card = document.querySelector(`[data-index="${currentIndex}"]`);
+            if (card) card.classList.add('active');
+            updateButtonStates();
+            updateProgress();
+            document.getElementById('prevBtn').disabled = currentIndex === 0;
+            document.getElementById('nextBtn').disabled = currentIndex === goldenSet.length - 1;
+        }
+
+        function persist() {
+            try {
+                const byAdId = {};
+                goldenSet.forEach(entry => {
+                    const labels = {};
+                    LABEL_FIELDS.forEach(f => { labels[f] = entry[f]; });
+                    byAdId[entry.ad_id] = labels;
+                });
+                localStorage.setItem('cognitiveLabelsByAdId', JSON.stringify(byAdId));
+                localStorage.setItem('cognitiveCurrentIndex', currentIndex);
+            } catch (e) {
+                // Never let a storage failure (quota, private-browsing
+                // restrictions, etc.) silently break every button click --
+                // this used to throw uncaught here (before labels-only
+                // persistence) whenever the golden set's embedded images
+                // pushed the full JSON.stringify past localStorage's
+                // ~5-10MB per-origin quota.
+                showStatus('Warning: could not save progress (' + e.message + ')', 'error');
+            }
+        }
+
+        function setJudgment(index, key, value) {
+            goldenSet[index][key] = value;
+            persist();
+            updateButtonStates();
+            updateProgress();
+        }
+
+        function setHumanPresence(index, value) {
+            goldenSet[index].expected_human_presence = value;
+            if (!value) {
+                goldenSet[index].expected_model_count = 0;
+            }
+            persist();
+            updateButtonStates();
+            updateProgress();
+        }
+
+        function setNotes(index, value) {
+            goldenSet[index].notes = value;
+            persist();
+        }
+
+        function updateButtonStates() {
+            const card = document.querySelector(`[data-index="${currentIndex}"]`);
+            if (!card) return;
+            const entry = goldenSet[currentIndex];
+
+            card.querySelectorAll('[data-field="headline"]').forEach(btn => {
+                const wantsTrue = btn.dataset.value === 'true';
+                btn.classList.toggle('selected', entry.expected_headline_correct === wantsTrue);
+            });
+            card.querySelectorAll('[data-field="hook"]').forEach(btn => {
+                btn.classList.toggle('selected', btn.dataset.value === entry.expected_hook_framework);
+            });
+            card.querySelectorAll('[data-field="presence"]').forEach(btn => {
+                const wantsTrue = btn.dataset.value === 'true';
+                btn.classList.toggle('selected', entry.expected_human_presence === wantsTrue);
+            });
+
+            const modelCountRow = document.getElementById(`model-count-row-${currentIndex}`);
+            if (modelCountRow) {
+                modelCountRow.classList.toggle('visible', entry.expected_human_presence === true);
+            }
+        }
+
+        function isFullyLabeled(entry) {
+            const modelCountOk = entry.expected_human_presence === false
+                ? true
+                : entry.expected_model_count !== null && entry.expected_model_count !== undefined;
+            return entry.expected_headline_correct !== null
+                && entry.expected_hook_framework !== null
+                && entry.expected_human_presence !== null
+                && modelCountOk;
+        }
+
+        function updateProgress() {
+            const labeled = goldenSet.filter(isFullyLabeled).length;
+            const total = goldenSet.length;
+            const pct = total ? (labeled / total) * 100 : 0;
+            document.getElementById('progressFill').style.width = pct + '%';
+            document.getElementById('stats').textContent = `${labeled}/${total} fully labeled`;
+        }
+
+        function nextAd() {
+            if (currentIndex < goldenSet.length - 1) { currentIndex++; showCurrentAd(); persist(); }
+        }
+        function previousAd() {
+            if (currentIndex > 0) { currentIndex--; showCurrentAd(); persist(); }
+        }
+
+        function downloadResults() {
+            if (!goldenSet.length) { showStatus('No golden set loaded', 'error'); return; }
+            const dataStr = JSON.stringify(goldenSet, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'cognitive_golden_set.json';
+            link.click();
+            URL.revokeObjectURL(url);
+            showStatus('✅ Downloaded cognitive_golden_set.json — save over data/cognitive_golden_set.json', 'success');
+        }
+
+        function resetProgress() {
+            if (confirm('Are you sure? This clears all labels for the currently loaded set.')) {
+                goldenSet.forEach(entry => {
+                    entry.expected_headline_correct = null;
+                    entry.expected_hook_framework = null;
+                    entry.expected_human_presence = null;
+                    entry.expected_model_count = null;
+                    entry.notes = '';
+                });
+                currentIndex = 0;
+                localStorage.removeItem('cognitiveLabelsByAdId');
+                localStorage.removeItem('cognitiveCurrentIndex');
+                renderAds();
+                showCurrentAd();
+                showStatus('Progress cleared', 'success');
+            }
+        }
+
+        function showStatus(message, type) {
+            const el = document.getElementById('statusMessage');
+            el.textContent = message;
+            el.className = `status-message ${type}`;
+            setTimeout(() => { el.className = 'status-message'; }, 4000);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text == null ? '' : String(text);
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

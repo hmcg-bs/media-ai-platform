@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import io
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from PIL import Image
@@ -86,6 +87,38 @@ class CognitiveStage(BaseStage):
         else:
             self.client = genai_client or GenAIClient()
 
+    def _call_cheap_tier(self, image_bytes: bytes) -> MarketingPsychology:
+        if self.use_replicate:
+            return self.client.extract_structured(
+                prompt=_CHEAP_PROMPT,
+                image_bytes=image_bytes,
+                schema=MarketingPsychology,
+            )
+        image_bytes_resized, mime = self._resize_for_vertex(image_bytes)
+        return self.client.extract_structured(
+            model=self.settings.gemini_cheap_model,
+            prompt=_CHEAP_PROMPT,
+            image_bytes=image_bytes_resized,
+            image_mime_type=mime,
+            schema=MarketingPsychology,
+        )
+
+    def _call_deep_tier(self, image_bytes: bytes) -> _DeepReasoningResult:
+        if self.use_replicate:
+            return self.client.extract_structured(
+                prompt=_DEEP_PROMPT,
+                image_bytes=image_bytes,
+                schema=_DeepReasoningResult,
+            )
+        image_bytes_resized, mime = self._resize_for_vertex(image_bytes)
+        return self.client.extract_structured(
+            model=self.settings.gemini_deep_model,
+            prompt=_DEEP_PROMPT,
+            image_bytes=image_bytes_resized,
+            image_mime_type=mime,
+            schema=_DeepReasoningResult,
+        )
+
     def process(self, context: PipelineContext) -> PipelineContext:
         start = time.monotonic()
         logger.info("stage_started", stage=self.name, ad_id=context.ad_id)
@@ -96,56 +129,42 @@ class CognitiveStage(BaseStage):
             # Cheap tier — marketing psychology. Skip if a prior stage (Datalab extract)
             # already filled it, so the Datalab hook/value-prop wins in the full pipeline.
             mp = context.result.marketing_psychology
-            if mp.hook_framework == HookFramework.UNKNOWN and not mp.primary_value_proposition:
-                try:
-                    if self.use_replicate:
-                        context.result.marketing_psychology = self.client.extract_structured(
-                            prompt=_CHEAP_PROMPT,
-                            image_bytes=image_bytes,
-                            schema=MarketingPsychology,
-                        )
-                    else:
-                        image_bytes_resized, mime = self._resize_for_vertex(image_bytes)
-                        context.result.marketing_psychology = self.client.extract_structured(
-                            model=self.settings.gemini_cheap_model,
-                            prompt=_CHEAP_PROMPT,
-                            image_bytes=image_bytes_resized,
-                            image_mime_type=mime,
-                            schema=MarketingPsychology,
-                        )
-                except Exception as exc:  # noqa: BLE001 — degrade this tier only
-                    logger.warning(
-                        "fallback_applied", stage=self.name, tier="cheap", error=str(exc)
-                    )
-            else:
+            run_cheap = (
+                mp.hook_framework == HookFramework.UNKNOWN and not mp.primary_value_proposition
+            )
+            if not run_cheap:
                 logger.info(
                     "stage_skipped", stage=self.name, tier="cheap",
                     reason="marketing_psychology already set",
                 )
 
-            # Deep tier — spatial + human analysis.
-            try:
-                if self.use_replicate:
-                    deep = self.client.extract_structured(
-                        prompt=_DEEP_PROMPT,
-                        image_bytes=image_bytes,
-                        schema=_DeepReasoningResult,
-                    )
-                else:
-                    image_bytes_resized, mime = self._resize_for_vertex(image_bytes)
-                    deep = self.client.extract_structured(
-                        model=self.settings.gemini_deep_model,
-                        prompt=_DEEP_PROMPT,
-                        image_bytes=image_bytes_resized,
-                        image_mime_type=mime,
-                        schema=_DeepReasoningResult,
-                    )
-                context.result.spatial_and_nested_objects = deep.spatial_and_nested_objects
-                context.result.human_model_analysis = deep.human_model_analysis
-            except Exception as exc:  # noqa: BLE001 — degrade this tier only
-                logger.warning(
-                    "fallback_applied", stage=self.name, tier="deep", error=str(exc)
+            # Cheap and deep tiers are independent calls (different prompts/schemas,
+            # same read-only image_bytes) — fired concurrently instead of waiting on
+            # one before starting the other, since each is pure network-I/O wait on
+            # its own Replicate/Vertex round trip (confirmed live: sequential stage_05
+            # averaged ~18-19s per ad, the dominant share of total per-ad time).
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                cheap_future = (
+                    pool.submit(self._call_cheap_tier, image_bytes) if run_cheap else None
                 )
+                deep_future = pool.submit(self._call_deep_tier, image_bytes)
+
+                if cheap_future is not None:
+                    try:
+                        context.result.marketing_psychology = cheap_future.result()
+                    except Exception as exc:  # noqa: BLE001 — degrade this tier only
+                        logger.warning(
+                            "fallback_applied", stage=self.name, tier="cheap", error=str(exc)
+                        )
+
+                try:
+                    deep = deep_future.result()
+                    context.result.spatial_and_nested_objects = deep.spatial_and_nested_objects
+                    context.result.human_model_analysis = deep.human_model_analysis
+                except Exception as exc:  # noqa: BLE001 — degrade this tier only
+                    logger.warning(
+                        "fallback_applied", stage=self.name, tier="deep", error=str(exc)
+                    )
 
             logger.info(
                 "stage_completed",

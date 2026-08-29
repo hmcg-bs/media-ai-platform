@@ -155,9 +155,167 @@ class TestNormalizeAd:
         })
         assert ad.is_active is False
 
+    def test_constructed_snapshot_url_wins_over_generic_url_echo(self) -> None:
+        """Regression: `raw.get("url")` isn't a per-ad field — it's the
+        Apify actor echoing back its own scrape input (the same generic
+        search-query URL for every item in a run, e.g.
+        "?q=supplements&sort_data...", never a per-ad link). Confirmed live
+        against the real corpus: this actor's output never populates
+        `ad_snapshot_url`, so every one of 2,736 ads ended up with the
+        identical generic search URL — useless for reaching a specific ad's
+        own detail page. The constructed `?id={ad_id}` form is Meta's real,
+        stable per-ad URL and must win whenever `ad_snapshot_url` is
+        absent, even though a (wrong) `url` field is also present."""
+        ad = normalize_ad({
+            "ad_archive_id": "999",
+            "url": "https://www.facebook.com/ads/library/?q=supplements&sort_data[mode]=total_impressions",
+            "snapshot": {},
+        })
+        assert ad.snapshot_url == "https://www.facebook.com/ads/library/?id=999"
+
+    def test_url_field_used_only_when_no_ad_id_available(self) -> None:
+        ad = normalize_ad({
+            "ad_archive_id": "",
+            "url": "https://www.facebook.com/ads/library/?q=supplements",
+            "snapshot": {},
+        })
+        assert ad.snapshot_url == "https://www.facebook.com/ads/library/?q=supplements"
+
+    def test_snapshot_url_defaults_to_empty_string_not_none(self) -> None:
+        ad = normalize_ad({"ad_archive_id": "", "snapshot": {}})
+        assert ad.snapshot_url == ""
+
     def test_ingested_at_populated(self, canned_meta_ad_library_item: dict) -> None:
         before_normalized = normalize_ad(canned_meta_ad_library_item)
         # ingested_at should be a non-empty ISO string.
         assert before_normalized.ingested_at
         assert "T" in before_normalized.ingested_at
         assert "+" in before_normalized.ingested_at or "Z" in before_normalized.ingested_at
+
+
+class TestVideoOnlyCards:
+    """Regression: a live fresh-scrape run found a real ad whose only
+    creative was a video-carousel "card" (video_hd_url +
+    video_preview_image_url, no original_image_url/resized_image_url at
+    all) -- normalize_ad silently produced image_urls=[] AND video_urls=[]
+    for it, discarding the ad's entire creative even though a real,
+    analyzable video + preview frame existed."""
+
+    def _video_card_raw(self) -> dict:
+        return {
+            "ad_archive_id": "1",
+            "snapshot": {
+                "cards": [{
+                    "video_hd_url": "https://video.example.com/hd.mp4",
+                    "video_sd_url": "https://video.example.com/sd.mp4",
+                    "video_preview_image_url": "https://cdn.example.com/preview.jpg",
+                }],
+                "images": [],
+                "videos": [],
+            },
+        }
+
+    def test_video_url_extracted_from_card_not_just_top_level_videos(self) -> None:
+        ad = normalize_ad(self._video_card_raw())
+        assert "https://video.example.com/hd.mp4" in ad.video_urls
+
+    def test_video_preview_image_used_as_fallback_when_no_real_image(self) -> None:
+        ad = normalize_ad(self._video_card_raw())
+        assert ad.image_urls == ["https://cdn.example.com/preview.jpg"]
+
+    def test_real_image_wins_over_video_preview_when_both_exist(self) -> None:
+        raw = self._video_card_raw()
+        raw["snapshot"]["images"] = [{"original_image_url": "https://cdn.example.com/real.jpg"}]
+        ad = normalize_ad(raw)
+        assert ad.image_urls == ["https://cdn.example.com/real.jpg"]
+
+    def test_top_level_videos_still_work_as_before(self) -> None:
+        raw = {
+            "ad_archive_id": "1",
+            "snapshot": {"videos": [{"video_hd_url": "https://video.example.com/hd.mp4"}]},
+        }
+        ad = normalize_ad(raw)
+        assert ad.video_urls == ["https://video.example.com/hd.mp4"]
+
+
+class TestDeliverySignals:
+    """impressions/reach/spend/gated_type/regional_transparency -- Meta's own
+    disclosure data. Confirmed live via a real Apify run that these come
+    back None/-1 for ordinary US commercial ads (the kind this corpus is
+    made of); still captured since a future EU-targeted or political/
+    social-issue scrape could populate them for real."""
+
+    def test_impressions_disclosed(self) -> None:
+        ad = normalize_ad({
+            "ad_archive_id": "1",
+            "snapshot": {},
+            "impressions_with_index": {"impressions_text": "10K-50K", "impressions_index": 4},
+        })
+        assert ad.impressions_text == "10K-50K"
+        assert ad.impressions_index == 4
+
+    def test_impressions_not_disclosed_normalizes_sentinel_to_none(self) -> None:
+        """Regression: confirmed live Meta uses impressions_index=-1 as its
+        own "not disclosed" sentinel, not a real bucket value -- must not
+        be stored as a literal -1 that looks like real (if odd) data."""
+        ad = normalize_ad({
+            "ad_archive_id": "1",
+            "snapshot": {},
+            "impressions_with_index": {"impressions_text": None, "impressions_index": -1},
+        })
+        assert ad.impressions_text is None
+        assert ad.impressions_index is None
+
+    def test_missing_impressions_field_entirely(self) -> None:
+        ad = normalize_ad({"ad_archive_id": "1", "snapshot": {}})
+        assert ad.impressions_text is None
+        assert ad.impressions_index is None
+
+    def test_reach_estimate_and_spend_passthrough_when_present(self) -> None:
+        ad = normalize_ad({
+            "ad_archive_id": "1",
+            "snapshot": {},
+            "reach_estimate": "50K-100K",
+            "spend": "$1K-$5K",
+        })
+        assert ad.reach_estimate == "50K-100K"
+        assert ad.spend == "$1K-$5K"
+
+    def test_reach_estimate_unexpected_shape_coerced_not_crashed(self) -> None:
+        """reach_estimate/spend's real populated shape has never been
+        observed live -- a non-str value (e.g. a nested dict or a number,
+        if that's what Meta actually sends) must not raise a validation
+        error the first time a real value appears."""
+        ad = normalize_ad({
+            "ad_archive_id": "1",
+            "snapshot": {},
+            "reach_estimate": {"low": 50000, "high": 100000},
+        })
+        assert ad.reach_estimate == "{'low': 50000, 'high': 100000}"
+
+    def test_gated_type_captured(self) -> None:
+        ad = normalize_ad({"ad_archive_id": "1", "snapshot": {}, "gated_type": "ELIGIBLE"})
+        assert ad.gated_type == "ELIGIBLE"
+
+    def test_regional_transparency_dict_captured(self) -> None:
+        ad = normalize_ad({
+            "ad_archive_id": "1",
+            "snapshot": {},
+            "transparency_by_location": {"eu_transparency": None, "uk_transparency": None},
+        })
+        assert ad.regional_transparency == {"eu_transparency": None, "uk_transparency": None}
+
+    def test_regional_transparency_non_dict_normalized_to_none(self) -> None:
+        ad = normalize_ad({"ad_archive_id": "1", "snapshot": {}, "transparency_by_location": "n/a"})
+        assert ad.regional_transparency is None
+
+    def test_all_delivery_signals_default_safely_on_minimal_ad(
+        self, canned_meta_ad_library_item_minimal: dict
+    ) -> None:
+        ad = normalize_ad(canned_meta_ad_library_item_minimal)
+        assert ad.impressions_text is None
+        assert ad.impressions_index is None
+        assert ad.reach_estimate is None
+        assert ad.spend is None
+        assert ad.gated_type is None
+        assert ad.regional_transparency is None

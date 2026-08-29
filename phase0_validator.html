@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phase 0: Product Classification Validator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.3);
+            margin-top: 15px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: white;
+            transition: width 0.3s ease;
+        }
+
+        .content {
+            padding: 40px;
+            min-height: 500px;
+        }
+
+        .ad-card {
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+
+        .ad-card.active {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .ad-index {
+            color: #667eea;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .ad-content {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin-bottom: 25px;
+            border-radius: 6px;
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+
+        .ad-image-wrap {
+            flex: 0 0 260px;
+        }
+
+        .ad-image {
+            width: 100%;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            display: block;
+            background: #eee;
+            min-height: 120px;
+            object-fit: contain;
+        }
+
+        .ad-image-nav {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 8px;
+        }
+
+        .ad-image-nav button {
+            padding: 4px 10px;
+            font-size: 12px;
+            border: 1px solid #d1d5db;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .ad-image-nav button:hover {
+            background: #f3f4f6;
+        }
+
+        .ad-image-count {
+            font-size: 12px;
+            color: #666;
+            align-self: center;
+        }
+
+        .ad-image-missing {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 180px;
+            color: #999;
+            font-size: 13px;
+            text-align: center;
+            padding: 10px;
+        }
+
+        .ad-fields {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .ad-page-name {
+            font-size: 20px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 12px;
+        }
+
+        .ad-link {
+            font-size: 13px;
+            color: #667eea;
+            word-break: break-all;
+        }
+
+        .ad-field {
+            margin-bottom: 15px;
+        }
+
+        .ad-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .ad-value {
+            font-size: 16px;
+            color: #333;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+
+        .question {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            border-radius: 6px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 15px 40px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 150px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-yes {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+
+        .btn-yes:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-yes.selected {
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3);
+            transform: scale(1.05);
+        }
+
+        .btn-no {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+        }
+
+        .btn-no:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-no.selected {
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.3);
+            transform: scale(1.05);
+        }
+
+        .navigation {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+
+        .btn-nav {
+            padding: 10px 30px;
+            background: #e5e7eb;
+            color: #333;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-nav:hover {
+            background: #d1d5db;
+        }
+
+        .btn-nav:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .footer {
+            background: #f8f9fa;
+            padding: 30px;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn-export {
+            padding: 12px 30px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-export:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-reset {
+            padding: 12px 30px;
+            background: #f3f4f6;
+            color: #333;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-reset:hover {
+            background: #e5e7eb;
+        }
+
+        .stats {
+            font-size: 14px;
+            color: #666;
+            text-align: center;
+            margin-top: 15px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .empty-state h2 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .instructions {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 30px;
+            color: #1e40af;
+        }
+
+        .instructions h3 {
+            margin-bottom: 10px;
+            color: #1e3a8a;
+        }
+
+        .instructions ul {
+            margin-left: 20px;
+            line-height: 1.8;
+        }
+
+        .file-input-wrapper {
+            margin-bottom: 30px;
+        }
+
+        .file-input-wrapper input[type="file"] {
+            padding: 10px;
+            border: 2px solid #d1d5db;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .keyboard-hint {
+            color: #999;
+            font-size: 12px;
+            text-align: center;
+            margin-top: 15px;
+        }
+
+        .status-message {
+            text-align: center;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .status-message.success {
+            background: #d1fae5;
+            color: #065f46;
+            display: block;
+        }
+
+        .status-message.error {
+            background: #fee2e2;
+            color: #991b1b;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Product Classification Validator</h1>
+            <p>Phase 0: Determine if each ad is promoting a supplement product</p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div style="margin-top: 10px; font-size: 14px;">
+                <span id="progressText">0/100 labeled</span>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="file-input-wrapper">
+                <input type="file" id="fileInput" accept=".json" style="display: none;">
+                <button class="btn-export" onclick="document.getElementById('fileInput').click()">
+                    📂 Load JSON File
+                </button>
+                <div class="stats" id="fileStatus">Select the supplements_validation_100.json file to start</div>
+            </div>
+
+            <div class="instructions">
+                <h3>📋 Instructions</h3>
+                <ul>
+                    <li><strong>Supplement (True):</strong> Vitamins, minerals, protein powder, herbs, amino acids, etc.</li>
+                    <li><strong>Non-Supplement (False):</strong> Fitness equipment, gym memberships, skincare, pharmaceuticals, etc.</li>
+                    <li>Use keyboard: <strong>T</strong> for True, <strong>F</strong> for False, Arrow keys to navigate</li>
+                    <li>Your progress is auto-saved to browser storage</li>
+                </ul>
+            </div>
+
+            <div class="status-message" id="statusMessage"></div>
+
+            <div id="adContainer"></div>
+
+            <div id="emptyState" class="empty-state">
+                <h2>No ads loaded</h2>
+                <p>Click "Load JSON File" above to begin</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <button class="btn-export" onclick="exportResults()">📥 Export Results (JSON)</button>
+            <button class="btn-reset" onclick="resetProgress()">🔄 Reset Progress</button>
+            <button class="btn-reset" onclick="downloadResults()">💾 Download Results</button>
+        </div>
+    </div>
+
+    <script>
+        let ads = [];
+        let labels = {}; // ad_index -> true/false
+        let currentIndex = 0;
+        let imageIndex = {}; // ad_index -> currently shown image_urls index
+
+        function cycleImage(adIdx, delta) {
+            const images = (ads[adIdx].image_urls || []).filter(Boolean);
+            if (images.length <= 1) return;
+            const cur = imageIndex[adIdx] || 0;
+            const next = (cur + delta + images.length) % images.length;
+            imageIndex[adIdx] = next;
+            const imgEl = document.getElementById(`img-${adIdx}`);
+            if (imgEl) imgEl.src = images[next];
+            const countEl = document.getElementById(`img-count-${adIdx}`);
+            if (countEl) countEl.textContent = `${next + 1} / ${images.length}`;
+        }
+
+        const fileInput = document.getElementById('fileInput');
+        fileInput.addEventListener('change', handleFileSelect);
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (!ads.length) return;
+
+            if (e.key.toUpperCase() === 'T') {
+                labelCurrent(true);
+                e.preventDefault();
+            } else if (e.key.toUpperCase() === 'F') {
+                labelCurrent(false);
+                e.preventDefault();
+            } else if (e.key === 'ArrowLeft') {
+                previousAd();
+                e.preventDefault();
+            } else if (e.key === 'ArrowRight') {
+                nextAd();
+                e.preventDefault();
+            }
+        });
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    ads = JSON.parse(e.target.result);
+                    labels = JSON.parse(localStorage.getItem('validationLabels')) || {};
+                    currentIndex = parseInt(localStorage.getItem('currentIndex')) || 0;
+
+                    if (ads.length === 0) {
+                        showStatus('No ads found in file', 'error');
+                        return;
+                    }
+
+                    showStatus(`Loaded ${ads.length} ads`, 'success');
+                    document.getElementById('fileStatus').textContent = `✅ Loaded ${ads.length} ads`;
+                    renderAds();
+                    showCurrentAd();
+                } catch (error) {
+                    showStatus('Error parsing JSON: ' + error.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function isPlaceholder(text) {
+            return !text || /\{\{.*\}\}/.test(text);
+        }
+
+        function renderAds() {
+            const container = document.getElementById('adContainer');
+            container.innerHTML = ads.map((ad, index) => {
+                const images = Array.isArray(ad.image_urls) ? ad.image_urls.filter(Boolean) : [];
+                const hasImages = images.length > 0;
+                const title = isPlaceholder(ad.title) ? null : ad.title;
+                const body = isPlaceholder(ad.body) ? null : ad.body;
+
+                return `
+                <div class="ad-card" data-index="${index}">
+                    <div class="ad-index">Ad ${index + 1} of ${ads.length}${ad.page_name ? ' &middot; ' + escapeHtml(ad.page_name) : ''}</div>
+                    <div class="ad-content">
+                        <div class="ad-image-wrap">
+                            ${hasImages ? `
+                                <img class="ad-image" id="img-${index}" src="${escapeHtml(images[0])}"
+                                     alt="Ad creative" loading="lazy"
+                                     onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{className:'ad-image-missing',textContent:'⚠️ Image failed to load (link may have expired)'}));">
+                                ${images.length > 1 ? `
+                                    <div class="ad-image-nav">
+                                        <button onclick="cycleImage(${index}, -1)">&larr; Prev</button>
+                                        <span class="ad-image-count" id="img-count-${index}">1 / ${images.length}</span>
+                                        <button onclick="cycleImage(${index}, 1)">Next &rarr;</button>
+                                    </div>
+                                ` : ''}
+                            ` : `<div class="ad-image-missing">No image available</div>`}
+                        </div>
+                        <div class="ad-fields">
+                            ${ad.page_name ? `
+                                <div class="ad-page-name">${escapeHtml(ad.page_name)}</div>
+                            ` : ''}
+                            ${title ? `
+                                <div class="ad-field">
+                                    <span class="ad-label">Title</span>
+                                    <div class="ad-value">${escapeHtml(title)}</div>
+                                </div>
+                            ` : ''}
+                            ${body ? `
+                                <div class="ad-field">
+                                    <span class="ad-label">Body</span>
+                                    <div class="ad-value">${escapeHtml(body)}</div>
+                                </div>
+                            ` : ''}
+                            ${ad.cta_text ? `
+                                <div class="ad-field">
+                                    <span class="ad-label">CTA</span>
+                                    <div class="ad-value">${escapeHtml(ad.cta_text)}</div>
+                                </div>
+                            ` : ''}
+                            ${ad.link_url ? `
+                                <div class="ad-field">
+                                    <span class="ad-label">Landing Page</span>
+                                    <div class="ad-value"><a class="ad-link" href="${escapeHtml(ad.link_url)}" target="_blank" rel="noopener">${escapeHtml(ad.link_url)}</a></div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <div class="question">Is this ad promoting a supplement product?</div>
+
+                    <div class="button-group">
+                        <button class="btn btn-yes" onclick="labelAd(${index}, true)">
+                            ✅ Yes, Supplement
+                        </button>
+                        <button class="btn btn-no" onclick="labelAd(${index}, false)">
+                            ❌ No, Non-Supplement
+                        </button>
+                    </div>
+
+                    <div class="keyboard-hint">
+                        💡 Press <strong>T</strong> for True, <strong>F</strong> for False, Arrow keys to navigate
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function showCurrentAd() {
+            document.querySelectorAll('.ad-card').forEach(card => card.classList.remove('active'));
+            const currentCard = document.querySelector(`[data-index="${currentIndex}"]`);
+            if (currentCard) {
+                currentCard.classList.add('active');
+                currentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            updateButtonStates();
+            updateProgress();
+        }
+
+        function labelAd(index, value) {
+            labels[index] = value;
+            localStorage.setItem('validationLabels', JSON.stringify(labels));
+            localStorage.setItem('currentIndex', currentIndex);
+            updateButtonStates();
+            updateProgress();
+
+            // Auto-advance to next unlabeled
+            setTimeout(() => {
+                let nextIndex = currentIndex + 1;
+                while (nextIndex < ads.length && labels[nextIndex] !== undefined) {
+                    nextIndex++;
+                }
+                if (nextIndex < ads.length) {
+                    currentIndex = nextIndex;
+                    showCurrentAd();
+                }
+            }, 300);
+        }
+
+        function labelCurrent(value) {
+            labelAd(currentIndex, value);
+        }
+
+        function updateButtonStates() {
+            const card = document.querySelector(`[data-index="${currentIndex}"]`);
+            if (!card) return;
+
+            const btnYes = card.querySelector('.btn-yes');
+            const btnNo = card.querySelector('.btn-no');
+            const label = labels[currentIndex];
+
+            btnYes.classList.remove('selected');
+            btnNo.classList.remove('selected');
+
+            if (label === true) btnYes.classList.add('selected');
+            if (label === false) btnNo.classList.add('selected');
+        }
+
+        function updateProgress() {
+            const labeled = Object.keys(labels).length;
+            const total = ads.length;
+            const percentage = (labeled / total) * 100;
+
+            document.getElementById('progressFill').style.width = percentage + '%';
+            document.getElementById('progressText').textContent = `${labeled}/${total} labeled`;
+        }
+
+        function nextAd() {
+            if (currentIndex < ads.length - 1) {
+                currentIndex++;
+                showCurrentAd();
+            }
+        }
+
+        function previousAd() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                showCurrentAd();
+            }
+        }
+
+        function exportResults() {
+            if (!ads.length) {
+                showStatus('No ads loaded', 'error');
+                return;
+            }
+
+            const results = ads.map((ad, index) => ({
+                ad_index: index,
+                title: ad.title || '',
+                body: ad.body || '',
+                cta_text: ad.cta_text || '',
+                is_supplement: labels[index] !== undefined ? labels[index] : null,
+                notes: ''
+            }));
+
+            const dataStr = JSON.stringify(results, null, 2);
+            console.log('Results ready for export:');
+            console.log(dataStr);
+            showStatus('✅ Results exported! Copy from browser console.', 'success');
+        }
+
+        function downloadResults() {
+            if (!ads.length) {
+                showStatus('No ads loaded', 'error');
+                return;
+            }
+
+            const results = ads.map((ad, index) => ({
+                ad_index: index,
+                title: ad.title || '',
+                body: ad.body || '',
+                cta_text: ad.cta_text || '',
+                is_supplement: labels[index] !== undefined ? labels[index] : null,
+                notes: ''
+            }));
+
+            const dataStr = JSON.stringify(results, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'supplements_ground_truth.json';
+            link.click();
+            URL.revokeObjectURL(url);
+
+            showStatus('✅ Downloaded supplements_ground_truth.json', 'success');
+        }
+
+        function resetProgress() {
+            if (confirm('Are you sure? This will clear all labels.')) {
+                labels = {};
+                currentIndex = 0;
+                localStorage.removeItem('validationLabels');
+                localStorage.removeItem('currentIndex');
+                updateProgress();
+                showCurrentAd();
+                showStatus('Progress cleared', 'success');
+            }
+        }
+
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('statusMessage');
+            statusEl.textContent = message;
+            statusEl.className = `status-message ${type}`;
+            setTimeout(() => {
+                statusEl.className = 'status-message';
+            }, 4000);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

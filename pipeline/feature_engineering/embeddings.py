@@ -1,53 +1,38 @@
-"""Generate text embeddings for ad copy."""
+"""Generate text embeddings for ad copy.
+
+Uses the same Replicate embedding-gemma client already proven elsewhere in
+the pipeline (pipeline/embedding/embed.py's embed_creative, ADR-008) rather
+than a separate model — one embedding provider for the whole project. Was
+previously a hash-seeded pseudo-random mock (384-dim, explicitly marked "will
+be replaced" in a comment) that carried zero semantic signal: two texts with
+similar meaning produced uncorrelated vectors, since a hash doesn't preserve
+similarity. Real embeddings are 768-dim (embedding-gemma's default, per
+Settings.embedding_dim), not 384.
+"""
 
 from __future__ import annotations
 
-from typing import Any
-
-import numpy as np
-
-
-def get_sentence_bert_embedding(text: str | None) -> list[float]:
-    """
-    Get Sentence-BERT embedding for text.
-
-    Returns a 384-dimensional embedding vector.
-    In production, this uses Sentence-Transformers library.
-    For testing, returns mock 384-dim vector.
-    """
-    if not text or len(text.strip()) == 0:
-        # Return zero vector for empty text
-        return [0.0] * 384
-
-    # In production, use:
-    # from sentence_transformers import SentenceTransformer
-    # model = SentenceTransformer('all-MiniLM-L6-v2')
-    # embedding = model.encode(text)
-    # return embedding.tolist()
-
-    # For now, return deterministic mock (will be replaced in WEEK 2)
-    import hashlib
-
-    hash_val = int(hashlib.md5(text.encode()).hexdigest(), 16)
-    rng = np.random.RandomState(hash_val % (2**32))
-    embedding = rng.normal(0, 1, 384).astype(np.float32)
-
-    # Normalize to unit length
-    norm = np.linalg.norm(embedding)
-    if norm > 0:
-        embedding = embedding / norm
-
-    return embedding.tolist()
+from pipeline.clients.replicate_client import EmbeddingClient
 
 
 def extract_embedding_features(
     title: str | None,
     body: str | None,
     usp: str | None,
+    client: EmbeddingClient | None = None,
 ) -> dict[str, list[float]]:
-    """Extract Sentence-BERT embeddings for title, body, and USP."""
+    """Embed title, body (truncated to 300 chars), and USP via embedding-gemma.
+
+    Empty/None text yields an empty vector rather than a wasted API call —
+    same convention as embed_creative(). `client` is injectable for offline
+    tests; defaults to a real (lazily-constructed) EmbeddingClient."""
+    client = client or EmbeddingClient()
+
+    def _embed(text: str | None) -> list[float]:
+        return client.embed(text) if text and text.strip() else []
+
     return {
-        "title_embedding": get_sentence_bert_embedding(title),
-        "body_embedding": get_sentence_bert_embedding(body[:300] if body else None),
-        "usp_embedding": get_sentence_bert_embedding(usp),
+        "title_embedding": _embed(title),
+        "body_embedding": _embed(body[:300] if body else None),
+        "usp_embedding": _embed(usp),
     }

@@ -1,0 +1,294 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Social Media Analysis Agent -- Platform Architecture",
+    "subtitle": "Generation v1 highlighted -- wayfinder map #42",
+    "output": "media_ai_platform.architecture.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "generation-v1-path",
+        "label": "Generation v1 (highlighted)",
+        "focus": [
+          "data_store",
+          "generation",
+          "client_layer",
+          "vertex",
+          "replicate"
+        ],
+        "note": "The AI ad-image synthesis path this map (#42) is scoping a harness for."
+      },
+      {
+        "id": "critique-modeling-pipeline",
+        "label": "Critique / modeling pipeline",
+        "focus": [
+          "ingestion",
+          "extraction",
+          "feature_eng",
+          "model_training",
+          "validation",
+          "data_store"
+        ],
+        "note": "The existing corpus-ingestion, feature-engineering, and model-training pipeline (wayfinder map #1) that Generation v1's guide reads from."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "ingestion",
+      "type": "backend",
+      "label": "Ingestion",
+      "sublabel": "Ad + landing-page scraping",
+      "pos": [
+        40,
+        35
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "extraction",
+      "type": "backend",
+      "label": "Step 2 Extraction",
+      "sublabel": "OCR, color, cognitive",
+      "pos": [
+        280,
+        35
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "feature_eng",
+      "type": "backend",
+      "label": "Feature Engineering",
+      "sublabel": "Builds the ML matrix",
+      "pos": [
+        520,
+        35
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "model_training",
+      "type": "backend",
+      "label": "Model Training",
+      "sublabel": "Cox, XGBoost, SHAP",
+      "pos": [
+        760,
+        35
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "validation",
+      "type": "backend",
+      "label": "Validation",
+      "sublabel": "Golden-set evals",
+      "pos": [
+        1000,
+        35
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "data_store",
+      "type": "database",
+      "label": "Data Store",
+      "sublabel": "Corpus, matrices, reports",
+      "pos": [
+        520,
+        130
+      ],
+      "size": [
+        150,
+        70
+      ]
+    },
+    {
+      "id": "generation",
+      "type": "backend",
+      "label": "Generation v1",
+      "sublabel": "Cold-start ad synthesis",
+      "pos": [
+        520,
+        226
+      ],
+      "size": [
+        150,
+        66
+      ]
+    },
+    {
+      "id": "client_layer",
+      "type": "backend",
+      "label": "Client Layer",
+      "sublabel": "Vertex + Replicate wrappers",
+      "pos": [
+        770,
+        226
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "vertex",
+      "type": "cloud",
+      "label": "Vertex Gemini",
+      "sublabel": "Google Cloud",
+      "pos": [
+        1010,
+        176
+      ],
+      "size": [
+        140,
+        60
+      ]
+    },
+    {
+      "id": "replicate",
+      "type": "cloud",
+      "label": "Replicate",
+      "sublabel": "Qwen, Flux, embeddings",
+      "pos": [
+        1010,
+        292
+      ],
+      "size": [
+        140,
+        60
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Local pipeline -- no serverless deployment (CLAUDE.md)",
+      "wraps": [
+        "ingestion",
+        "extraction",
+        "feature_eng",
+        "model_training",
+        "validation",
+        "data_store",
+        "generation",
+        "client_layer"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Generation v1 -- wayfinder map #36",
+      "wraps": [
+        "generation",
+        "client_layer"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "ingestion-to-data",
+      "from": "ingestion",
+      "to": "data_store",
+      "label": "writes corpus"
+    },
+    {
+      "id": "extraction-to-data",
+      "from": "extraction",
+      "to": "data_store",
+      "label": "writes creative_features",
+      "labelDy": 10
+    },
+    {
+      "id": "feature-eng-to-data",
+      "from": "feature_eng",
+      "to": "data_store",
+      "label": "writes feature_matrix",
+      "labelDy": 24
+    },
+    {
+      "id": "model-training-to-data",
+      "from": "model_training",
+      "to": "data_store",
+      "label": "writes training reports",
+      "labelDy": 10
+    },
+    {
+      "id": "validation-to-data",
+      "from": "validation",
+      "to": "data_store",
+      "label": "writes eval reports"
+    },
+    {
+      "id": "data-to-generation",
+      "from": "data_store",
+      "to": "generation",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "generation-to-client",
+      "from": "generation",
+      "to": "client_layer",
+      "label": "structured calls",
+      "variant": "emphasis"
+    },
+    {
+      "id": "client-to-vertex",
+      "from": "client_layer",
+      "to": "vertex",
+      "label": "Gemini API"
+    },
+    {
+      "id": "client-to-replicate",
+      "from": "client_layer",
+      "to": "replicate",
+      "label": "model API"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "violet",
+      "title": "Generation v1 (highlighted)",
+      "items": [
+        "Round 6: masked background inpaint (background-remover + Flux Fill) replaced Flux Kontext's whole-image edit",
+        "Round 5: retrieval-grounded style brief from real top-performing ads",
+        "Capped regeneration loop gated on two independent agents (blend + guide-adherence)",
+        "See wayfinder map #36 and docs/generation-v1-architecture.md"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Shared Client Layer",
+      "items": [
+        "Data Store arrows show writes only -- each stage also reads its own input back (omitted to keep the Generation v1 path clearest)",
+        "Ingestion and Extraction also call this layer for their own LLM use -- omitted as edges",
+        "No per-call cost/latency instrumentation yet -- the gap map #42 exists to close"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Retired, not diagrammed",
+      "items": [
+        "archive/old-src/, frontend/, and the top-level tests/ directory are the pre-ADR-005 'Media AI Platform' scaffold (LiteLLM + Supabase + Next.js) -- explicitly superseded, never extended (CLAUDE.md)",
+        "Knowledge-base directories (Vault/, Concepts/, Research/, Platform/, Obsidian-Vault/) are notes, not runtime code"
+      ]
+    }
+  ]
+}

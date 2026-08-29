@@ -8,22 +8,114 @@
 from __future__ import annotations
 
 import json
+import threading
+from urllib.parse import urlsplit
 
-import requests
+import httpx
 from structlog import get_logger
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from ingestion.product_page import ProductPage
 from ingestion.product_page_analyzer import extract_semantic_fields
+from ingestion.rate_limiter import DomainRateLimiterRegistry
+from pipeline.config import get_settings
 
 logger = get_logger(__name__)
 
+# Retryable: 429/403 confirmed (empirically) to be part of the same
+# burst-triggered block as each other on this project's corpus, not a
+# permanent auth failure — deliberately different from
+# pipeline/clients/replicate_client.py's _is_retryable, which treats 403 as
+# non-retryable. Do not "fix" this back to match that convention.
+_RETRY_STATUS = {429, 403, 500, 502, 503, 504}
 
-def scrape_landing_page(url: str, timeout_s: int = 10) -> str | None:
+_client_lock = threading.Lock()
+_shared_client: httpx.Client | None = None
+
+
+def get_http_client() -> httpx.Client:
+    """Lazily-built, module-level shared httpx.Client — safe to use across
+    threads, gives connection pooling/keep-alive for free (fewer fresh
+    TCP+TLS handshakes = faster and less bot-signal-y than a fresh
+    `requests.get()` per call)."""
+    global _shared_client
+    if _shared_client is None:
+        with _client_lock:
+            if _shared_client is None:
+                settings = get_settings()
+                _shared_client = httpx.Client(
+                    headers={
+                        "User-Agent": settings.scrape_user_agent,
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        "Accept-Language": "en-US,en;q=0.9",
+                    },
+                    follow_redirects=True,
+                    timeout=settings.scrape_timeout_s,
+                )
+    return _shared_client
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    if isinstance(exc, httpx.TimeoutException):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in _RETRY_STATUS
+    return False
+
+
+def _fetch(
+    url: str,
+    client: httpx.Client,
+    rate_limiter: DomainRateLimiterRegistry | None,
+) -> httpx.Response | None:
+    """Shared retry-wrapped GET used by scrape_landing_page and
+    resolve_and_scrape. Returns the response (post-redirects) or None."""
+    settings = get_settings()
+    domain = urlsplit(url).netloc
+
+    @retry(
+        stop=stop_after_attempt(settings.scrape_max_attempts),
+        wait=wait_exponential(
+            min=settings.scrape_backoff_min_seconds, max=settings.scrape_backoff_max_seconds
+        ),
+        retry=retry_if_exception(_is_retryable),
+        reraise=True,
+    )
+    def _do_request() -> httpx.Response:
+        if rate_limiter:
+            rate_limiter.acquire(domain)
+        resp = client.get(url)
+        resp.raise_for_status()
+        return resp
+
+    try:
+        response = _do_request()
+    except (httpx.HTTPError, httpx.TimeoutException) as e:
+        logger.warning("scrape_failed", url=url, error=str(e))
+        return None
+
+    if rate_limiter:
+        rate_limiter.record_response(domain, dict(response.headers), response.text[:2000])
+
+    return response
+
+
+def scrape_landing_page(
+    url: str,
+    timeout_s: int = 10,
+    client: httpx.Client | None = None,
+    rate_limiter: DomainRateLimiterRegistry | None = None,
+) -> str | None:
     """Scrape HTML content from a landing page URL.
 
     Args:
         url: The product page URL to scrape.
-        timeout_s: HTTP request timeout in seconds.
+        timeout_s: Unused when `client` is provided (the client carries its
+            own timeout from settings); kept for backward compatibility.
+        client: Shared httpx.Client to use (see get_http_client). Falls
+            back to the module-level shared client if not given.
+        rate_limiter: If given, acquired before every attempt (including
+            retries) — pacing and backoff compose instead of racing.
 
     Returns:
         HTML content as string, or None if scrape failed.
@@ -32,13 +124,29 @@ def scrape_landing_page(url: str, timeout_s: int = 10) -> str | None:
         logger.warning("invalid_url", url=url)
         return None
 
-    try:
-        response = requests.get(url, timeout=timeout_s, allow_redirects=True)
-        response.raise_for_status()
-        return response.text
-    except requests.RequestException as e:
-        logger.warning("scrape_failed", url=url, error=str(e))
+    response = _fetch(url, client or get_http_client(), rate_limiter)
+    return response.text if response is not None else None
+
+
+def resolve_and_scrape(
+    url: str,
+    client: httpx.Client | None = None,
+    rate_limiter: DomainRateLimiterRegistry | None = None,
+) -> tuple[str, str] | None:
+    """Like scrape_landing_page, but also returns the final URL after
+    redirects — needed by the tiered scraper to discover a /products/{handle}
+    path that only appears post-redirect (common for click-tracker domains).
+
+    Returns (final_url, html) or None if the fetch failed.
+    """
+    if not url or not url.startswith(("http://", "https://")):
+        logger.warning("invalid_url", url=url)
         return None
+
+    response = _fetch(url, client or get_http_client(), rate_limiter)
+    if response is None:
+        return None
+    return str(response.url), response.text
 
 
 def extract_json_ld(html: str) -> dict | None:

@@ -131,10 +131,32 @@ object relationships (between objects in one scene).
 _Avoid_: Layout, arrangement, structure.
 
 **Generation** (a.k.a. Ideal Ad):
-The post-v1 product that re-renders an *improved* ad — Qwen layers → new copy →
-code-rendered assembly. Deliberately fenced off from Critique's extraction
+The post-v1 product that synthesizes a new ad from a client's raw product
+photo + stated intention, grounded in real top-performing Corpus ads
+(retrieval) and Cox/SHAP-derived visual directives. Built mechanism (as of
+Wayfinder Map #36, Round 6): a masked background inpaint — a background-
+removal model produces an alpha matte of the product, which becomes an
+Inpaint Mask so a fill model (Flux Fill Pro) regenerates only the
+surrounding scene while the product's own pixels — including its label
+text — are never touched — composed with Gemini-driven copy/style-brief/
+layout/review agents and deterministic code-rendered text/CTA elements.
+Does *not* use Qwen Layer Decomposition for this path (that mechanism is
+reserved for Critique). Deliberately fenced off from Critique's extraction
 evidence so generated pixels never contaminate analysis.
-_Avoid_: Reconstruction, rendering, the brief generator (that was the retired design).
+_Avoid_: Reconstruction, rendering, the brief generator (that was the retired
+design), Qwen layers (not used on this path).
+
+**Inpaint Mask**:
+A black-and-white image marking which pixels a diffusion fill model may
+regenerate (white) versus must preserve verbatim (black) — Generation's
+mechanism for protecting the product photo's own pixels from being
+re-rendered (and, historically, garbled) by a whole-image edit model. A
+different, unrelated technique from Layer Decomposition's RGBA layer
+splitting, despite Layer Decomposition's own entry listing "masking" as a
+term to avoid for *that* concept — the two share an English word, not a
+mechanism.
+_Avoid_: Segmentation (that term is reserved for Layer Decomposition's own
+avoid-list, for the same reason spelled out above).
 
 **Product Type**:
 The normalized category of the product an Ad Creative sells — the **join key**

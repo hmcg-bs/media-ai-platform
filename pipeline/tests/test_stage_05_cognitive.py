@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from pipeline.models.output_schema import (
     HookFramework,
     HumanModelAnalysis,
@@ -67,3 +69,42 @@ def test_cheap_tier_skipped_when_marketing_already_set():
     CognitiveStage(genai_client=mock).process(ctx)
     assert "MarketingPsychology" not in mock.calls              # cheap tier skipped
     assert ctx.result.marketing_psychology.primary_value_proposition == "from datalab"
+
+
+class _SlowMockGenAI:
+    """Mimics _MockGenAI but with an artificial per-call delay, so a timing
+    assertion can prove the two tiers genuinely overlap in wall-clock time."""
+
+    def __init__(self, delay: float = 0.3):
+        self.delay = delay
+
+    def extract_structured(self, *, model, prompt, image_bytes, image_mime_type, schema):
+        time.sleep(self.delay)
+        if schema is MarketingPsychology:
+            return MarketingPsychology(hook_framework=HookFramework.PAS)
+        if schema is _DeepReasoningResult:
+            return _DeepReasoningResult(
+                human_model_analysis=HumanModelAnalysis(human_presence=True)
+            )
+        raise AssertionError(f"unexpected schema {schema}")
+
+
+class TestCheapAndDeepTiersRunConcurrently:
+    """Regression: the two Gemini calls used to run sequentially inside
+    process() (cheap tier fully awaited, then deep tier started) — confirmed
+    live as the dominant per-ad cost (~18-19s combined). They're independent
+    (different prompts/schemas, same read-only image bytes), so they must
+    overlap rather than sum."""
+
+    def test_both_tiers_complete_in_roughly_one_delay_not_two(self):
+        delay = 0.3
+        start = time.monotonic()
+        CognitiveStage(genai_client=_SlowMockGenAI(delay=delay)).process(_ctx())
+        elapsed = time.monotonic() - start
+        # Sequential would take ~2*delay (0.6s); concurrent should be ~delay (0.3s).
+        assert elapsed < delay * 1.7
+
+    def test_both_tiers_still_populate_result_when_concurrent(self):
+        result = CognitiveStage(genai_client=_SlowMockGenAI(delay=0.01)).process(_ctx())
+        assert result.result.marketing_psychology.hook_framework == HookFramework.PAS
+        assert result.result.human_model_analysis.human_presence is True

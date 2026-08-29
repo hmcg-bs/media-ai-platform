@@ -9,6 +9,7 @@ from replicate.exceptions import ReplicateError
 
 from pipeline.clients.replicate_client import (
     EmbeddingClient,
+    FluxKontextClient,
     QwenLayersClient,
     QwenVLClient,
     _is_retryable,
@@ -49,6 +50,33 @@ def test_qwen_layers_passes_input_and_reads_layers():
     assert isinstance(inputs["image"], io.BytesIO)
     assert inputs["num_layers"] == 4
     assert inputs["output_format"] == "png"
+
+
+def test_flux_kontext_passes_real_schema_fields_and_reads_edited_image():
+    calls: list[tuple[str, dict]] = []
+
+    def run(model, inputs):
+        calls.append((model, inputs))
+        return _FileOutput(b"edited-image-bytes")
+
+    edited = FluxKontextClient(run=run).edit(
+        b"\xff\xd8fake-jpeg", "swap the background to a beach scene"
+    )
+    assert edited == b"edited-image-bytes"
+    model, inputs = calls[0]
+    assert model == "black-forest-labs/flux-kontext-pro"
+    assert inputs["prompt"] == "swap the background to a beach scene"
+    assert isinstance(inputs["input_image"], io.BytesIO)
+    assert inputs["aspect_ratio"] == "match_input_image"
+    assert inputs["output_format"] == "png"
+
+
+def test_flux_kontext_normalizes_list_output_to_single_image():
+    def run(model, inputs):
+        return [_FileOutput(b"first-of-batch")]
+
+    edited = FluxKontextClient(run=run).edit(b"\xff\xd8fake-jpeg", "prompt")
+    assert edited == b"first-of-batch"
 
 
 def test_qwen_vl_returns_string():
@@ -92,6 +120,31 @@ def test_is_retryable_classification():
     assert _is_retryable(_FakeError(503)) is True
     assert _is_retryable(_FakeError(404)) is False       # our bug, don't retry
     assert _is_retryable(ValueError("x")) is False
+
+
+def test_is_retryable_covers_transient_httpx_transport_errors():
+    # Regression: a real full-corpus build_matrix.py run crashed on an
+    # unretried httpx.RemoteProtocolError ("Server disconnected without
+    # sending a response") after ~935 ads' worth of paid API calls, since
+    # only httpx.TimeoutException was covered. httpx.TransportError is the
+    # shared base for these transient connection failures.
+    assert _is_retryable(httpx.RemoteProtocolError("Server disconnected")) is True
+    assert _is_retryable(httpx.ConnectError("x")) is True
+    assert _is_retryable(httpx.ReadError("x")) is True
+
+
+def test_retries_on_remote_protocol_error_then_succeeds():
+    attempts = {"n": 0}
+
+    def run(model, inputs):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise httpx.RemoteProtocolError("Server disconnected")
+        return [0.4, 0.5]
+
+    vec = EmbeddingClient(run=run, settings=_FAST).embed("hi")
+    assert vec == [0.4, 0.5]
+    assert attempts["n"] == 2                        # retried once
 
 
 def test_retries_on_throttle_then_succeeds():
