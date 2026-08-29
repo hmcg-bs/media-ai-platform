@@ -345,6 +345,44 @@ negative instruction against a diffusion model's strong bias is a probability sh
 a guarantee, even at higher guidance. Product label fidelity (the masking guarantee from
 bug #5's fix) was unaffected in both samples — confirmed by direct zoomed comparison.
 
+## 12. Compositor's text band / CTA had hard geometric edges, read as a pasted-on sticker
+
+**Symptom**: with bug #11's fix shipped, the blend-review agent's dominant remaining
+complaint (2 of 3 attempts in a full end-to-end run) was "harsh, defined edges" on the
+text band and CTA button, and "generic drop shadows... do not perfectly match the
+lighting of the product and background" — making them "appear as separate overlays."
+This is the same class of issue flagged and deferred back in Round 4; now confirmed as
+the *primary* blocker once the bigger hallucination issues were fixed.
+
+**Root cause**: `_draw_background_band` and `_draw_cta_element` drew their fill via plain
+`ImageDraw.rounded_rectangle` calls — PIL only antialiases ~1px at a shape's boundary,
+which reads as a geometric cutout against a photographic background, no matter how good
+the shadow underneath is.
+
+**Fix**: new `_composite_feathered_shape` blurs the shape's own alpha channel before
+compositing (the same technique already used in `masking.py` for the inpaint mask
+boundary), applied to both the band and the CTA fill. Softened the shared drop shadow
+slightly (blur 6→8, opacity 200→190) alongside it.
+
+**Regression tests**: `pipeline/tests/test_generation_compositor.py::TestFeatheredEdges`
+(4 tests: edge gradient vs. hard step, opacity scaling, band edge blend, CTA edge blend).
+
+**Confirmed live, with an important caveat**: zoomed inspection of a real generated ad
+confirmed the feathering is genuinely present and working at the pixel level (a visible
+soft transition at the band's rounded corner). First CTA feather radius (4px) was too
+strong — combined with the drop shadow underneath, it read as a glowing blob rather than
+a button; reduced to 1px, just enough to soften PIL's hard antialiasing without losing
+the button's silhouette. **However**, a full end-to-end re-run still returned
+`blends_well=False` on all 3 attempts — investigation showed this run's failure was
+actually **dominated by bug #6 (duplicate-product hallucination) reoccurring**, not a
+regression in this fix: the hallucinated second product consumed most of the canvas,
+forcing the layout agent into tiny, awkward corner zones — one box was cramped enough
+that its own text overflowed the canvas edge. The blend agent's "harsh edges" complaint
+in that run is a real symptom of the cramped layout, not evidence the feathering isn't
+working. This is an honest, unresolved interaction between two separate issues (#6 and
+this one) rather than a clean before/after win — flagged for the user rather than
+silently claimed as fully fixed.
+
 ## Round 6 live-verification findings
 
 One finding from this round is now fully explained — see bug #10 above (signed URL
