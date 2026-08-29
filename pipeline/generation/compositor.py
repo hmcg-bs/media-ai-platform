@@ -28,6 +28,19 @@ soft, blurred drop-shadow layer underneath itself first (see
 _composite_blurred_shadow) -- a standard, cheap depth cue, not a generative
 model call.
 
+Round 8 (2026-08-30): with Round 6/8's background-generation fixes shipped,
+the blend-review agent's dominant complaint shifted to this module's own
+rendering -- "harsh, defined edges" on both the text band and the CTA
+button, "generic drop shadows... do not perfectly match... lighting of the
+product and background," making them "appear as separate overlays." A hard
+geometric edge (PIL's `rounded_rectangle` only antialiases ~1px) reads as a
+sticker cut out and pasted onto a photograph, no matter how good the shadow
+underneath it is. `_composite_feathered_shape` blurs the shape's own alpha
+channel before compositing -- the same feathering technique already used in
+masking.py for the inpaint mask boundary -- so the band and button edges
+fade into the surrounding photo instead of cutting off geometrically.
+Applied to both `_draw_background_band` and `_draw_cta_element`'s fill.
+
 Round 5 (2026-08-28), a bigger fix: `_load_font` had been calling
 `ImageFont.truetype("DejaVuSans-Bold.ttf", size)` with a bare filename this
 platform's font resolver cannot actually find -- confirmed live, every call
@@ -56,13 +69,29 @@ from pipeline.generation.elements import AdSpec, ElementSpec, FontPersonality
 _MIN_FONT_SIZE = 10
 _WCAG_AA_CONTRAST_RATIO = 4.5
 _SHADOW_OFFSET = (6, 8)
-_SHADOW_BLUR_RADIUS = 6
-_SHADOW_OPACITY = 200  # 0-255
+_SHADOW_BLUR_RADIUS = 8
+_SHADOW_OPACITY = 190  # 0-255
 # Round 4 (2026-08-28): the first shadow attempt (offset (3,4), blur 3,
 # opacity 130) rendered but was confirmed live to be nearly invisible at
 # normal viewing size -- the blend-check agent still called the CTA/text
 # "flat" with no shadow. Strengthened until visually unmistakable in a
 # direct crop-and-zoom check, not just "technically present in the pixels."
+# Round 8 (2026-08-30): blur nudged 6->8 and opacity 200->190 -- a softer,
+# more ambient-looking falloff, paired with the edge-feathering fix below,
+# rather than the harder-edged "generic drop shadow" the blend agent named
+# explicitly. Kept well within Round 4's own "must stay visually
+# unmistakable" bound -- this is a softening, not a return to invisible.
+
+# Round 8 (2026-08-30): how far a band/button edge's alpha is blurred before
+# compositing -- see _composite_feathered_shape's own docstring for why.
+_BAND_FEATHER_RADIUS = 6
+# A button is expected to look like a button -- crisp, clickable UI, not a
+# soft scrim. First attempt at 4px read as a glowing blob once combined
+# with the drop shadow underneath (both dark, feathered edges bleeding into
+# the shadow) -- confirmed by direct zoomed inspection, not assumed. 1px is
+# just enough to soften PIL's own hard antialiasing step without losing the
+# button's silhouette.
+_CTA_FEATHER_RADIUS = 1
 
 _FONTS_DIR = Path(__file__).parent / "assets" / "fonts"
 _FONT_FILES: dict[FontPersonality, str] = {
@@ -100,6 +129,30 @@ def _composite_blurred_shadow(canvas: Image.Image, draw_shadow) -> Image.Image:
     draw_shadow(shadow_draw)
     shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(_SHADOW_BLUR_RADIUS))
     return Image.alpha_composite(canvas.convert("RGBA"), shadow_layer).convert("RGB")
+
+
+def _composite_feathered_shape(
+    canvas: Image.Image, draw_shape, feather_radius: int, target_alpha: int = 255
+) -> Image.Image:
+    """Draws a fully-opaque shape via `draw_shape(draw)` (which should draw
+    in solid color with alpha=255), blurs *only its alpha channel* so the
+    shape's own boundary fades into the surrounding photo instead of cutting
+    off geometrically, scales the result down to `target_alpha`, then
+    alpha-composites onto canvas. Returns a NEW canvas, same convention as
+    _composite_blurred_shadow.
+
+    Round 8 fix: a hard `rounded_rectangle` edge (PIL antialiases only ~1px)
+    reads as a sticker pasted onto a photograph -- confirmed live via the
+    blend-review agent repeatedly naming "harsh, defined edges" on both the
+    text band and the CTA button as why they look like separate overlays."""
+    layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    draw_shape(ImageDraw.Draw(layer))
+    alpha = layer.split()[-1].filter(ImageFilter.GaussianBlur(feather_radius))
+    if target_alpha < 255:
+        scale = target_alpha / 255.0
+        alpha = alpha.point(lambda p: int(p * scale))
+    layer.putalpha(alpha)
+    return Image.alpha_composite(canvas.convert("RGBA"), layer).convert("RGB")
 
 
 def _load_font(size: int, personality: FontPersonality = "clean_modern") -> ImageFont.FreeTypeFont:
@@ -198,17 +251,22 @@ def _draw_background_band(
     #36): rather than hoping a single sampled pixel is representative of a
     whole box that might straddle the product's edge, this guarantees a
     known, controlled surface for the text to sit on, then lets
-    _ensure_legible_color pick a color against that known surface."""
+    _ensure_legible_color pick a color against that known surface. Round 8:
+    the edge is now feathered (see _composite_feathered_shape) instead of a
+    hard rectangle cutoff -- confirmed live as the blend agent's top
+    complaint about why the band read as a pasted-on sticker."""
     x0, y0, x1, y1 = box
     x0, y0 = x0 - _BAND_PADDING, y0 - _BAND_PADDING
     x1, y1 = x1 + _BAND_PADDING, y1 + _BAND_PADDING
     color_hex = el.background_band_color_hex or "#ffffff"
     r, g, b = _hex_to_rgb(color_hex)
-    band_layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    ImageDraw.Draw(band_layer).rounded_rectangle(
-        [x0, y0, x1, y1], radius=10, fill=(r, g, b, el.background_band_opacity)
+
+    def draw_shape(draw: ImageDraw.ImageDraw) -> None:
+        draw.rounded_rectangle([x0, y0, x1, y1], radius=10, fill=(r, g, b, 255))
+
+    return _composite_feathered_shape(
+        canvas, draw_shape, _BAND_FEATHER_RADIUS, target_alpha=el.background_band_opacity
     )
-    return Image.alpha_composite(canvas.convert("RGBA"), band_layer).convert("RGB")
 
 
 def _draw_text_element(
@@ -303,8 +361,13 @@ def _draw_cta_element(
         )
 
     canvas = _composite_blurred_shadow(canvas, draw_shadow)
+
+    def draw_fill(draw: ImageDraw.ImageDraw) -> None:
+        draw.rounded_rectangle([x0, y0, x1, y1], radius=radius, fill=(*fill_rgb, 255))
+
+    # Round 8: feathered edge, same fix and reasoning as _draw_background_band.
+    canvas = _composite_feathered_shape(canvas, draw_fill, _CTA_FEATHER_RADIUS)
     draw = ImageDraw.Draw(canvas)
-    draw.rounded_rectangle([x0, y0, x1, y1], radius=radius, fill=fill)
 
     if not el.text:
         return canvas

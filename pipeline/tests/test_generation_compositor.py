@@ -11,6 +11,7 @@ from PIL import Image
 
 from pipeline.generation.compositor import (
     _clamp_box,
+    _composite_feathered_shape,
     _contrast_ratio,
     _ensure_legible_color,
     compose_ad,
@@ -318,5 +319,99 @@ class TestBackgroundBand:
         )
         result = compose_ad(spec)
         img = Image.open(io.BytesIO(result)).convert("RGB")
-        px = img.getpixel((int(0.1 * 400) - 5, int(0.12 * 400)))
-        assert px == (255, 255, 255)  # untouched white background just outside the text glyphs
+        # Far enough from the shadow's blur radius (Round 8: 8px) to be
+        # genuinely untouched, not just outside the glyphs themselves.
+        px = img.getpixel((int(0.1 * 400) - 25, int(0.12 * 400)))
+        assert px == (255, 255, 255)
+
+
+class TestFeatheredEdges:
+    """Round 8: the blend-review agent's dominant live complaint was "harsh,
+    defined edges" on both the text band and CTA button, making them read
+    as separate pasted-on overlays rather than part of one designed image.
+    _composite_feathered_shape blurs the shape's own alpha before
+    compositing -- these tests confirm the edge is a real gradient, not a
+    hard step, without over-blurring the shape's own solid interior."""
+
+    def test_feathered_shape_edge_is_a_gradient_not_a_hard_step(self):
+        canvas = Image.new("RGB", (200, 200), "white")
+
+        def draw_shape(draw):
+            draw.rectangle([50, 50, 150, 150], fill=(255, 0, 0, 255))
+
+        result = _composite_feathered_shape(canvas, draw_shape, feather_radius=6)
+
+        interior = result.getpixel((100, 100))  # deep inside the shape
+        exterior = result.getpixel((10, 10))  # far outside the shape
+        edge = result.getpixel((50, 100))  # exactly on the nominal boundary
+
+        assert interior[0] > 200 and interior[1] < 50  # solid red, unaffected by feathering
+        assert exterior == (255, 255, 255)  # untouched white, far from the blur radius
+        # The edge pixel must be a genuine blend -- neither pure red nor
+        # pure white -- which a hard-edged rounded_rectangle would never
+        # produce at exactly its own boundary.
+        assert 0 < edge[0] < 255 or 0 < edge[1] < 255
+
+    def test_target_alpha_scales_the_whole_shape_not_just_the_edge(self):
+        canvas = Image.new("RGB", (200, 200), "white")
+
+        def draw_shape(draw):
+            draw.rectangle([50, 50, 150, 150], fill=(255, 0, 0, 255))
+
+        half_opacity = _composite_feathered_shape(
+            canvas, draw_shape, feather_radius=2, target_alpha=128
+        )
+        interior = half_opacity.getpixel((100, 100))
+        # Red (255,0,0) over white (255,255,255): R is 255 either way, so
+        # check G/B, which are 0 in pure red and 255 in white -- ~50%
+        # opacity should land roughly halfway, not at either extreme.
+        assert 80 < interior[1] < 200
+        assert 80 < interior[2] < 200
+
+    def test_band_edge_blends_rather_than_cutting_off_hard(self):
+        spec = AdSpec(
+            canvas_width=400, canvas_height=400,
+            background_and_product_image=_blank_background_bytes(400, 400, color="white"),
+            elements=[
+                ElementSpec(
+                    element_type="headline", text="HEADLINE",
+                    x=0.3, y=0.3, width=0.4, height=0.1,
+                    background_band=True, background_band_color_hex="#ff0000",
+                    background_band_opacity=255,
+                ),
+            ],
+        )
+        result = compose_ad(spec)
+        img = Image.open(io.BytesIO(result)).convert("RGB")
+        # Sample a vertical strip crossing the band's left edge; a feathered
+        # edge produces a monotonic-ish gradient, a hard edge would jump
+        # from pure white directly to pure red with no intermediate values.
+        band_x0 = int(0.3 * 400) - 14  # _BAND_PADDING
+        y = int(0.35 * 400)
+        row = [img.getpixel((band_x0 - 8 + i, y)) for i in range(16)]
+        reds = [px[0] for px in row]
+        blues = [px[2] for px in row]
+        has_intermediate = any(0 < b < 255 for b in blues) or any(
+            0 < r < 255 for r in reds if r != 255
+        )
+        assert has_intermediate
+
+    def test_cta_button_edge_blends_rather_than_cutting_off_hard(self):
+        spec = AdSpec(
+            canvas_width=400, canvas_height=400,
+            background_and_product_image=_blank_background_bytes(400, 400, color="white"),
+            elements=[
+                ElementSpec(
+                    element_type="cta_graphic", text="SHOP",
+                    x=0.3, y=0.4, width=0.4, height=0.15,
+                    fill_color_hex="#000000",
+                ),
+            ],
+        )
+        result = compose_ad(spec)
+        img = Image.open(io.BytesIO(result)).convert("RGB")
+        x0 = int(0.3 * 400)
+        y = int(0.475 * 400)
+        row = [img.getpixel((x0 - 6 + i, y)) for i in range(12)]
+        grays = [px[0] for px in row]
+        assert any(0 < g < 255 for g in grays)
