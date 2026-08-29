@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Generation v1 -- Cold-Start Ad Synthesis, Call by Call",
+    "subtitle": "Every model call, its real inputs, and its real output -- wayfinder map #42",
+    "output": "generation_v1_sequence.sequence.html",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [
+      900,
+      980
+    ],
+    "views": [
+      {
+        "id": "style-and-copy",
+        "label": "Style brief + copy",
+        "focus": [
+          "pipeline",
+          "vertex"
+        ],
+        "note": "The two text/vision Gemini calls that decide what the ad says and how it should look, before any pixels are touched."
+      },
+      {
+        "id": "masked-inpaint",
+        "label": "Masked background inpaint",
+        "focus": [
+          "pipeline",
+          "bgremover",
+          "fluxfill"
+        ],
+        "note": "Round 6's fix: the product photo is masked, not re-rendered whole -- this is why label text stopped garbling."
+      },
+      {
+        "id": "review-and-regen",
+        "label": "Review + regeneration loop",
+        "focus": [
+          "pipeline",
+          "compositor",
+          "vertex",
+          "fluxfill"
+        ],
+        "note": "Two independent agents (blend, guide-adherence) gate a capped retry back to the masked inpaint step."
+      }
+    ]
+  },
+  "participants": [
+    {
+      "id": "pipeline",
+      "type": "backend",
+      "label": "Pipeline",
+      "sublabel": "cold-start orchestrator"
+    },
+    {
+      "id": "vertex",
+      "type": "cloud",
+      "label": "Vertex Gemini",
+      "sublabel": "gemini-2.5-flash(-lite)"
+    },
+    {
+      "id": "bgremover",
+      "type": "cloud",
+      "label": "BG Remover",
+      "sublabel": "851-labs (Replicate)"
+    },
+    {
+      "id": "fluxfill",
+      "type": "cloud",
+      "label": "Flux Fill Pro",
+      "sublabel": "black-forest-labs"
+    },
+    {
+      "id": "compositor",
+      "type": "backend",
+      "label": "Compositor",
+      "sublabel": "deterministic PIL"
+    }
+  ],
+  "segments": [
+    {
+      "from": 165,
+      "to": 333,
+      "label": "Style + copy (text/vision Gemini)"
+    },
+    {
+      "from": 333,
+      "to": 500,
+      "label": "Masked background inpaint (Round 6)"
+    },
+    {
+      "from": 500,
+      "to": 668,
+      "label": "Layout + composite (deterministic)"
+    },
+    {
+      "from": 668,
+      "to": 880,
+      "label": "Review + capped regeneration"
+    }
+  ],
+  "messages": [
+    {
+      "id": "style-req",
+      "from": "pipeline",
+      "to": "vertex",
+      "y": 185,
+      "label": "derive_style_brief: gemini-2.5-flash",
+      "variant": "emphasis",
+      "note": "Input: up to 3 real reference-ad images (top composite-success-score ads) + guide's visual directives text. Falls back to text-only (guide directives alone) if 0 reference ads fetch -- corpus image URLs are frequently stale."
+    },
+    {
+      "id": "style-res",
+      "from": "vertex",
+      "to": "pipeline",
+      "y": 227,
+      "label": "StyleBrief JSON (background, palette, font_personality, band)",
+      "variant": "return"
+    },
+    {
+      "id": "copy-req",
+      "from": "pipeline",
+      "to": "vertex",
+      "y": 269,
+      "label": "draft_copy: gemini-2.5-flash-lite",
+      "variant": "emphasis",
+      "note": "Input: product_name + client's intention (text) + guide's copy-style/hook-framework directives (text only, no image)."
+    },
+    {
+      "id": "copy-res",
+      "from": "vertex",
+      "to": "pipeline",
+      "y": 311,
+      "label": "AdCopy JSON (headline, secondary_copy, cta_text, price_offer_text)",
+      "variant": "return"
+    },
+    {
+      "id": "bg-remove-req",
+      "from": "pipeline",
+      "to": "bgremover",
+      "y": 353,
+      "label": "remove_background",
+      "variant": "emphasis",
+      "note": "Input: the client's raw product photo (image bytes), untouched."
+    },
+    {
+      "id": "bg-remove-res",
+      "from": "bgremover",
+      "to": "pipeline",
+      "y": 395,
+      "label": "RGBA cutout (alpha channel = product silhouette)",
+      "variant": "return"
+    },
+    {
+      "id": "fill-req",
+      "from": "pipeline",
+      "to": "fluxfill",
+      "y": 437,
+      "label": "inpaint: black-forest-labs/flux-fill-pro",
+      "variant": "emphasis",
+      "note": "Input: original photo + a mask built locally (build_inpaint_mask: binarize -> dilate 4px -> invert -> feather; black=preserve, white=inpaint) + a prompt from StyleBrief's scene description + intention + explicit no-text/no-duplicate-product rules."
+    },
+    {
+      "id": "fill-res",
+      "from": "fluxfill",
+      "to": "pipeline",
+      "y": 479,
+      "label": "background_and_product.png (product pixels byte-identical to source)",
+      "variant": "return"
+    },
+    {
+      "id": "layout-req",
+      "from": "pipeline",
+      "to": "vertex",
+      "y": 521,
+      "label": "plan_layout: gemini-2.5-flash (vision)",
+      "variant": "emphasis",
+      "note": "Input: the background_and_product image above + a text hint from the guide's headline_zone directive."
+    },
+    {
+      "id": "layout-res",
+      "from": "vertex",
+      "to": "pipeline",
+      "y": 563,
+      "label": "LayoutPlan JSON (product_bbox + up to 4 text zones, 0-1 fractions)",
+      "variant": "return"
+    },
+    {
+      "id": "compose-req",
+      "from": "pipeline",
+      "to": "compositor",
+      "y": 605,
+      "label": "compose_ad(AdSpec)",
+      "note": "Input: background_and_product image + ElementSpecs built from AdCopy (text) + LayoutPlan (zones) + StyleBrief (font/band/color)."
+    },
+    {
+      "id": "compose-res",
+      "from": "compositor",
+      "to": "pipeline",
+      "y": 647,
+      "label": "final ad PNG (shrink-to-fit text, WCAG auto-contrast, drop shadows)",
+      "variant": "return"
+    },
+    {
+      "id": "blend-req",
+      "from": "pipeline",
+      "to": "vertex",
+      "y": 689,
+      "label": "review_blend: gemini-2.5-flash (vision)",
+      "variant": "emphasis",
+      "note": "Input: the final composited ad image only -- judges visual cohesion alone, never content or directives."
+    },
+    {
+      "id": "blend-res",
+      "from": "vertex",
+      "to": "pipeline",
+      "y": 731,
+      "label": "BlendReview JSON (blends_well, issues, notes)",
+      "variant": "return"
+    },
+    {
+      "id": "review-req",
+      "from": "pipeline",
+      "to": "vertex",
+      "y": 773,
+      "label": "review_ad: gemini-2.5-flash (vision)",
+      "variant": "emphasis",
+      "note": "Input: the final ad image + a text summary of every guide directive to check against."
+    },
+    {
+      "id": "review-res",
+      "from": "vertex",
+      "to": "pipeline",
+      "y": 815,
+      "label": "AdReview JSON (overall_pass, directive_checks, regeneration_recommended)",
+      "variant": "return"
+    },
+    {
+      "id": "retry",
+      "from": "pipeline",
+      "to": "fluxfill",
+      "y": 857,
+      "label": "RETRY inpaint -- feedback folded into intention text (capped, max 2 passes)",
+      "variant": "dashed",
+      "note": "Only fires if not passed AND passes remain. Loops back to the masked-inpaint step, then re-runs layout + compose + both reviews on the new frame."
+    }
+  ],
+  "cards": [
+    {
+      "dot": "violet",
+      "title": "Two local, non-model steps run before this sequence starts",
+      "items": [
+        "extract_generation_guide(): reads pre-computed Cox survival + SHAP reports from data/ -- no API call, no image",
+        "get_top_reference_ads(n=3): reads the local corpus + fetches real ad images over HTTP -- often returns fewer than 3 (even 0) since corpus image URLs go stale"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Why masking (Round 6)",
+      "items": [
+        "Flux Kontext (the pre-Round-6 mechanism) re-rendered the WHOLE frame every call -- confirmed live to garble the product's own label text",
+        "Masking makes the product's pixels structurally untouchable, not just requested to be preserved -- see docs/generation-failure-modes.md #5"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Known limits, not hidden",
+      "items": [
+        "The anti-duplication prompt rule (fill-req) reduces but does not guarantee against a second, garbled product appearing in the open background -- probabilistic, not structural (failure mode #6)",
+        "0 reference ads (style-req's fallback) measurably degrades background quality -- confirmed in the final Round 6 live run"
+      ]
+    }
+  ]
+}
