@@ -67,19 +67,44 @@ _LAST_RESORT_FALLBACK = (
 # of "a labeled bottle" elsewhere, since ad-style product photography is
 # exactly what it's biased toward. Rule (2) below, added after that finding,
 # eliminated it in the next live run.
+#
+# Round 8 (2026-08-29), found live: even with rules (1)-(3) below, Flux Fill
+# rendered a full ghost paragraph of ad copy into the background -- confirmed
+# by zooming in, its text legibly echoed fragments of the *intention* string
+# verbatim ("...Joint Suppleme[nt]... for Caring Dog Owners..."). Root cause:
+# the old prompt embedded the raw intention text as "Context for the scene:
+# {intention}" with no instruction not to render it -- and intention strings
+# are themselves marketing-copy-shaped, which is exactly the training-data
+# pattern a diffusion model biases toward reproducing literally. This
+# instruction is now placed FIRST in the prompt (primacy matters for
+# instruction-following) and explicitly names the intention text as
+# non-renderable context, not a caption to paint.
+#
+# Live-verified after the Round 8 fix above: the ghost-paragraph and
+# duplicate-full-product failures are gone, but a narrower leak remained --
+# the model rendered the product's own brand name ("wuffes") onto an
+# unrelated prop (a drinking glass), a loophole in rule (2)'s enumerated
+# object list (bottle/jar/container/package/box never mentioned "glass" or
+# "cup"). Rule (1) below now names props explicitly rather than leaving
+# "no markings on anything" as a softer tail clause in rule (3) -- the
+# specific, repeated enumeration in the old rule (2) was clearly more
+# salient to the model than the general clause, so the fix is to make the
+# text ban itself exhaustively concrete, not to add a 4th rule.
 _NO_TEXT_INSTRUCTION = (
     "This is a pure background/environment fill, not a finished ad layout. "
-    "Absolute rules for the filled area: (1) zero text of any kind -- no "
-    "words, letters, numbers, logos, watermarks, signage, labels, or "
-    "typography anywhere; (2) do not depict any bottle, jar, container, "
-    "package, box, or product of any kind -- there is already exactly one "
-    "product in this image (outside the filled area) and it must remain the "
-    "only one, never duplicated, echoed, or repeated anywhere in the "
-    "background; (3) environment and props only (e.g. a surface, furniture, "
-    "plants, a pet, natural light) with no readable markings on anything. "
-    "Any headline, call-to-action, or price text belongs to a separate "
-    "design layer added afterward and must never be rendered into this "
-    "image."
+    "Absolute rules for the filled area, all equally important: (1) zero "
+    "text of any kind, anywhere in the scene, on any surface or object -- "
+    "no words, letters, numbers, logos, watermarks, signage, labels, "
+    "taglines, or typography, including on props, glasses, cups, dishes, or "
+    "any other item, under any circumstances; (2) do not depict any bottle, "
+    "jar, container, package, box, or product of any kind -- there is "
+    "already exactly one product in this image (outside the filled area) "
+    "and it must remain the only one, never duplicated, echoed, or repeated "
+    "anywhere in the background; (3) environment and props only (e.g. a "
+    "surface, furniture, plants, a pet, natural light), always completely "
+    "blank and unmarked. Any headline, call-to-action, or price text "
+    "belongs to a separate design layer added afterward and must never be "
+    "rendered into this image."
 )
 
 
@@ -132,7 +157,10 @@ def generate_background_and_product(
     cutout = bg_remover_client.remove_background(product_photo_bytes)
     mask = build_inpaint_mask(cutout)
     prompt = (
+        f"{_NO_TEXT_INSTRUCTION} "
         f"Fill in a new background and surrounding scene to achieve: {scene}. "
-        f"Context for the scene: {intention}. {_NO_TEXT_INSTRUCTION}"
+        f"Mood and setting only, for visual tone -- these words describe the "
+        f"intended feeling, they are not a caption or tagline and must never "
+        f"be rendered as text in the image: {intention}."
     )
     return flux_fill_client.inpaint(product_photo_bytes, mask, prompt)

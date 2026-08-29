@@ -103,6 +103,14 @@ class Settings(BaseSettings):
         "a029dff38972b5fda4ec5d75d7d1cd25aeff621d2cf4946a41055d7db66b80bc"
     )
     flux_fill_model: str = "black-forest-labs/flux-fill-pro"
+    # Round 8 (2026-08-29): default is Replicate's own default (60, range
+    # 1.5-100 -- confirmed against the model's real schema). Raised after
+    # live evidence the default let the no-text/no-duplicate-product rules
+    # get violated repeatedly (a full ghost ad-copy paragraph, extra product
+    # jars) despite them being explicit in the prompt -- higher guidance
+    # trades some output diversity for stricter prompt adherence, which is
+    # exactly the trade this failure mode calls for.
+    flux_fill_guidance: float = 85.0
 
     # Datalab copy/positioning (plain convert; keeps the headline Style Preserver drops).
     datalab_api_key: str = ""

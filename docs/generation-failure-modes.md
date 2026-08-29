@@ -304,6 +304,47 @@ written.
 **Status**: fast-fail fix shipped and verified; the actual data-recovery fix is a real,
 external, account-level blocker — revisit once the Apify usage limit resets or is raised.
 
+## 11. Flux Fill rendered a full ghost ad-copy paragraph, echoing the intention text verbatim
+
+**Symptom**: a live full-pipeline run (`smoke_generated_ad_v12.png`) showed faint but
+legible duplicate text ghosted behind the compositor's real headline/body copy — zoomed
+crop read fragments like *"Joint Suppleme[nt]..."* and *"for Caring Dog Owners"*, plus a
+garbled cursive line and, separately, three small extra product jars and a graphic arrow
+— three simultaneous violations of the existing no-text/no-duplicate-product rule in one
+run, on the *third* regeneration attempt (never recovered across 3 attempts).
+
+**Root cause**: the ghosted text wasn't random — it directly echoed the `intention`
+string passed into the prompt. The old prompt embedded it as
+`f"Context for the scene: {intention}."` with no instruction against rendering it
+literally, and intention strings are themselves marketing-copy-shaped ("Energizing joint
+supplement... for caring dog owners") — exactly the pattern a diffusion model trained on
+real ads is biased to reproduce as visible text when given no counter-instruction. The
+no-text rule also sat *after* the scene description and intention in the original prompt
+order, when primacy generally matters for instruction-following in these models.
+
+**Fix**:
+1. Moved `_NO_TEXT_INSTRUCTION` to the very front of the prompt (before the scene
+   description and intention), and strengthened it ("under any circumstances").
+2. The intention text is now explicitly framed as non-renderable: *"Mood and setting
+   only, for visual tone -- these words describe the intended feeling, they are not a
+   caption or tagline and must never be rendered as text in the image."*
+3. `FluxFillClient.inpaint()` gained a `guidance` parameter (Replicate's own knob for
+   prompt-adherence vs. output diversity, range 1.5-100, default 60) — raised the
+   project default to 85 (`Settings.flux_fill_guidance`) to make the now-stronger
+   instructions actually stick more often.
+
+**Regression tests**: `pipeline/tests/test_generation_background.py::test_intention_text_is_explicitly_marked_non_renderable`,
+`test_no_text_instruction_is_front_loaded_in_the_prompt`,
+`pipeline/tests/test_replicate_clients.py::test_flux_fill_passes_mask_and_default_guidance_from_settings`.
+
+**Confirmed live**: re-ran the isolated background-generation step twice with the fix —
+**zero ghost text in both samples** (previously present). Duplicate-product hallucination
+(the separate, already-documented failure mode #6) improved but did not disappear: 1 of
+2 samples still showed a second bottle. Consistent with #6's own framing — a text-only
+negative instruction against a diffusion model's strong bias is a probability shift, not
+a guarantee, even at higher guidance. Product label fidelity (the masking guarantee from
+bug #5's fix) was unaffected in both samples — confirmed by direct zoomed comparison.
+
 ## Round 6 live-verification findings
 
 One finding from this round is now fully explained — see bug #10 above (signed URL

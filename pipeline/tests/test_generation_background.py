@@ -137,6 +137,41 @@ class TestGenerateBackgroundAndProduct:
         assert "zero text" in prompt or "no text" in prompt
         assert "never be rendered into this image" in prompt
 
+    def test_intention_text_is_explicitly_marked_non_renderable(self):
+        """Round 8 regression: live-verified Flux Fill rendered a full ghost
+        paragraph of ad copy into the background, legibly echoing fragments
+        of the raw intention string -- the old prompt embedded it as plain
+        "context" with no instruction against rendering it. The intention
+        text itself must always be present (it's real guidance), but the
+        prompt must explicitly forbid treating it as a caption to paint."""
+        bg_remover = _FakeBgRemoverClient(_rgba_cutout_bytes())
+        flux_fill = _FakeFluxFillClient(b"final-image-bytes")
+
+        generate_background_and_product(
+            bg_remover, flux_fill, b"photo",
+            intention="Energizing joint supplement for caring dog owners",
+            guide=_guide_with(),
+        )
+
+        prompt = flux_fill.calls[0][2]
+        assert "Energizing joint supplement for caring dog owners" in prompt
+        assert "must never be rendered as text" in prompt.lower()
+
+    def test_no_text_instruction_is_front_loaded_in_the_prompt(self):
+        """Primacy matters for instruction-following in these models --
+        the no-text/no-duplicate rules must appear before the scene
+        description and intention, not buried after them."""
+        bg_remover = _FakeBgRemoverClient(_rgba_cutout_bytes())
+        flux_fill = _FakeFluxFillClient(b"final-image-bytes")
+
+        generate_background_and_product(
+            bg_remover, flux_fill, b"photo",
+            intention="some intention text", guide=_guide_with(),
+        )
+
+        prompt = flux_fill.calls[0][2]
+        assert prompt.index("zero text of any kind") < prompt.index("Fill in a new background")
+
 
 class TestSceneDescription:
     def test_style_brief_takes_precedence_over_guide(self):

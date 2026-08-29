@@ -8,7 +8,9 @@ import httpx
 from replicate.exceptions import ReplicateError
 
 from pipeline.clients.replicate_client import (
+    BackgroundRemoverClient,
     EmbeddingClient,
+    FluxFillClient,
     FluxKontextClient,
     QwenLayersClient,
     QwenVLClient,
@@ -77,6 +79,52 @@ def test_flux_kontext_normalizes_list_output_to_single_image():
 
     edited = FluxKontextClient(run=run).edit(b"\xff\xd8fake-jpeg", "prompt")
     assert edited == b"first-of-batch"
+
+
+def test_background_remover_passes_rgba_and_reads_cutout():
+    calls: list[tuple[str, dict]] = []
+
+    def run(model, inputs):
+        calls.append((model, inputs))
+        return _FileOutput(b"rgba-cutout-bytes")
+
+    cutout = BackgroundRemoverClient(run=run).remove_background(b"\xff\xd8fake-jpeg")
+    assert cutout == b"rgba-cutout-bytes"
+    model, inputs = calls[0]
+    assert model.startswith("851-labs/background-remover")
+    assert isinstance(inputs["image"], io.BytesIO)
+    assert inputs["background_type"] == "rgba"
+
+
+def test_flux_fill_passes_mask_and_default_guidance_from_settings():
+    """Round 8: guidance defaults from settings.flux_fill_guidance (raised
+    to 85 after live evidence the default let no-text/no-duplicate rules get
+    violated) unless explicitly overridden per call."""
+    calls: list[tuple[str, dict]] = []
+
+    def run(model, inputs):
+        calls.append((model, inputs))
+        return _FileOutput(b"filled-image-bytes")
+
+    filled = FluxFillClient(run=run).inpaint(b"\xff\xd8photo", b"mask-bytes", "fill the scene")
+    assert filled == b"filled-image-bytes"
+    model, inputs = calls[0]
+    assert model == "black-forest-labs/flux-fill-pro"
+    assert inputs["prompt"] == "fill the scene"
+    assert isinstance(inputs["image"], io.BytesIO)
+    assert isinstance(inputs["mask"], io.BytesIO)
+    assert inputs["guidance"] == 85.0
+
+
+def test_flux_fill_guidance_can_be_overridden_per_call():
+    calls: list[tuple[str, dict]] = []
+
+    def run(model, inputs):
+        calls.append((model, inputs))
+        return _FileOutput(b"filled-image-bytes")
+
+    FluxFillClient(run=run).inpaint(b"photo", b"mask", "prompt", guidance=40.0)
+    assert calls[0][1]["guidance"] == 40.0
 
 
 def test_qwen_vl_returns_string():

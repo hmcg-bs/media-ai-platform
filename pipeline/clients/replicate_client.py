@@ -201,6 +201,7 @@ class FluxFillClient(_ReplicateBase):
         prompt: str,
         *,
         output_format: str = "png",
+        guidance: float | None = None,
     ) -> bytes:
         logger.debug("replicate_call", model=self.settings.flux_fill_model)
         out = self._execute(
@@ -210,6 +211,7 @@ class FluxFillClient(_ReplicateBase):
                 "image": io.BytesIO(image_bytes),
                 "mask": io.BytesIO(mask_bytes),
                 "output_format": output_format,
+                "guidance": guidance if guidance is not None else self.settings.flux_fill_guidance,
             },
         )
         item = out[0] if isinstance(out, list) else out
