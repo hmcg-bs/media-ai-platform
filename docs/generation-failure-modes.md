@@ -264,22 +264,53 @@ from guide text with zero images. Alignment scoring verified against the full
 3,057-row corpus offline: a real, meaningful score distribution (-3 to +1), top
 candidates by `(alignment, composite_score)` genuinely embody a confirmed directive.
 
+## 10. Reference-ad image URLs are cryptographically expired, not blocked or rate-limited
+
+**Symptom**: `get_top_reference_ads()` returns 0 results in practice, every time it's been
+live-tested — 100% of attempted image fetches return HTTP 403, corpus-wide. Every prior
+write-up (Round 6, Round 7) treated this as an unexplained staleness rate; this entry is
+the actual root cause, found by decoding the URLs directly rather than guessing.
+
+**Root cause**: every `image_urls` entry in `data/supplements_fresh_final.json` is a
+Facebook CDN (`scontent.*.fbcdn.net`) URL carrying a signed, embedded expiry as a hex
+Unix timestamp in its own `oe` query parameter. Decoded a real sample directly — e.g.
+`oe=6A921A90` → `2026-08-28T23:32:32Z` — then checked the **entire corpus**: all 3,057
+ads' URLs had already expired at time of check. This is not a rate limit, a User-Agent
+block, or a policy change on Facebook's side (all three were live hypotheses in earlier
+write-ups) — it's a cryptographically signed, time-limited URL that no retry, header
+change, or backoff strategy can extend. Any static, persisted corpus of these URLs goes
+100% dead within days of being scraped, by design, regardless of how the fetch code is
+written.
+
+**Fix, two parts**:
+1. **Free, shipped**: `reference_ads.py::_is_url_expired()` decodes the `oe` timestamp
+   locally and skips a known-dead candidate before ever attempting a network fetch —
+   turns an ~8-second-timeout-per-candidate 403 storm (a full run once took ~45 minutes
+   to exhaust the corpus) into an instant, free skip. Does not recover any usable
+   images by itself — only makes the inevitable failure fast and honest.
+2. **Paid, attempted, blocked externally**: `ingestion/refresh_image_urls.py` (built in
+   a prior session, never previously run against this corpus) re-scrapes the same
+   search query and matches fresh URLs back by `ad_archive_id`. Backed up the corpus,
+   ran it for real against all 3,057 ads (`count=3000`, user confirmed the ~$2-3 Apify
+   cost beforehand) — failed with `ForbiddenError: Monthly usage hard limit exceeded`,
+   an **Apify account-level billing/quota limit**, not a code defect. Confirmed the
+   corpus file was untouched (byte-identical to the pre-run backup) before discarding
+   the backup. This part of the fix is blocked on the user's Apify account, not on any
+   code in this repo.
+
+**Regression tests**: `pipeline/tests/test_generation_reference_ads.py::TestIsUrlExpired`,
+`TestSkipsExpiredUrlsWithoutNetworkCall`.
+
+**Status**: fast-fail fix shipped and verified; the actual data-recovery fix is a real,
+external, account-level blocker — revisit once the Apify usage limit resets or is raised.
+
 ## Round 6 live-verification findings
 
-Two findings surfaced by the final full end-to-end verification run
-(`smoke_generated_ad_v11.png`), kept here rather than filed as bugs since neither is a
-code defect — both are real, honest limitations worth tracking:
+One finding from this round is now fully explained — see bug #10 above (signed URL
+expiry, not a policy change or rate limit, root-caused in Round 7). Kept here rather
+than merged in since it documents the *evidence trail* (what was observed, and read as,
+before the root cause was known) as its own useful record:
 
-- **Reference-ad corpus staleness has gotten worse, not better.** 100% of the 3,057-ad
-  corpus's candidate image URLs returned HTTP 403 in this run, versus the ~54% figure
-  documented in earlier sessions — reconfirmed again live during Round 7's own smoke
-  test (100% of candidates 403'd a second time). `reference_ads.py`'s designed fallback
-  (skip and continue) worked correctly both times — the run completed — but this means
-  the fidelity check (and, before Round 7, the style-brief system) is currently *never*
-  actually grounded in real images in practice. Worth a dedicated investigation (is
-  Facebook's CDN policy stricter now, or is this corpus's URL set simply older) before
-  assuming the reference-ad mechanism is providing its intended benefit at all in
-  production — this is now the single highest-leverage open gap in Generation v1.
 - **The (then-)text-only style fallback under-performed the (then-)image-grounded
   path** — a Round 6 finding, superseded in framing by Round 7 (see bug #9 above):
   with zero reference ads available, that run's background came out "plain,

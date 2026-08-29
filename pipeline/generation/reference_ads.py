@@ -16,11 +16,30 @@ ads by composite success score has `background_style=Busy`, zero use a
 plain studio background -- i.e. real winners really do embody the guide's
 own statistical findings, which is exactly what makes them usable as
 fidelity-check exemplars rather than arbitrary anecdotes.
+
+**Root cause of "reference ads never fetch" (found and fixed, 2026-08-29)**:
+every `image_urls` entry is a Facebook CDN URL with a signed, embedded
+expiry (`oe=<hex unix timestamp>`) -- confirmed by decoding it directly, not
+assumed. Checked the ENTIRE corpus: 100% of `data/supplements_fresh_final.json`'s
+3,057 ads had already-expired URLs at time of check. This is not a rate
+limit, User-Agent block, or transient CDN issue -- no amount of retrying or
+header-tweaking fixes a cryptographically expired signed URL. `_is_url_expired()`
+below parses that timestamp locally (free, no network call) so
+`get_top_reference_ads` can skip known-dead candidates instantly instead of
+spending an 8-second timeout finding out via a guaranteed 403 -- the exact
+reason a full run once took ~45 minutes just to exhaust the candidate list.
+The *durable* fix is refreshing the corpus's `image_urls` close to time of
+use (`ingestion/refresh_image_urls.py` already exists for this, re-running
+the same corpus search and matching fresh URLs back by `ad_archive_id`) --
+a real, separate, cost-incurring (live Apify scrape) operation, not
+something this module can do for free at read time.
 """
 
 from __future__ import annotations
 
 import json
+import re
+import time
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,6 +53,24 @@ logger = get_logger(__name__)
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
 DEFAULT_MATRIX_FILE = DATA_DIR / "feature_matrix_fresh.json"
 DEFAULT_ADS_FILE = DATA_DIR / "supplements_fresh_final.json"
+
+_OE_PARAM_RE = re.compile(r"[?&]oe=([0-9a-fA-F]+)")
+
+
+def _is_url_expired(url: str) -> bool:
+    """Facebook CDN image URLs carry their own expiry as a hex Unix
+    timestamp in the `oe` query param -- confirmed live by decoding real
+    corpus URLs. A URL with no `oe` param (a different CDN, or a shape this
+    corpus hasn't shown) is never treated as expired -- absence of the
+    signal isn't evidence of staleness, only a positive match is."""
+    m = _OE_PARAM_RE.search(url)
+    if not m:
+        return False
+    try:
+        expiry = int(m.group(1), 16)
+    except ValueError:
+        return False
+    return expiry < time.time()
 
 
 @dataclass
@@ -127,6 +164,9 @@ def get_top_reference_ads(
             break
         ad = ads_by_id.get(row["ad_id"])
         if not ad or not ad.get("image_urls"):
+            continue
+        if _is_url_expired(ad["image_urls"][0]):
+            logger.debug("reference_ad_url_expired", ad_id=row["ad_id"])
             continue
         try:
             req = urllib.request.Request(

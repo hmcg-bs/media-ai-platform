@@ -103,12 +103,16 @@ corpus-coverage gap must degrade gracefully rather than returning nothing to com
 against.
 
 Each successfully-fetched ad becomes a `ReferenceAd` (id, composite score,
-**alignment score**, image bytes, dominant color, background style, hook framework). A
-per-ad image fetch failure (stale Facebook CDN URL) is logged and skipped, never
-raised — callers must handle receiving **fewer than `n`, including zero** (confirmed
-live: a full run once saw 100% of 3,057 candidates 403 — see
-[the Round 6 live-verification findings](./generation-failure-modes.md#round-6-live-verification-findings)) —
-reconfirmed again live during Round 7 (same 100% failure rate).
+**alignment score**, image bytes, dominant color, background style, hook framework).
+`_is_url_expired()` decodes each URL's own signed expiry (a Facebook CDN `oe` query
+param) and skips a known-dead candidate before ever attempting a fetch — free, no
+network call. A per-ad fetch failure (any other cause) is logged and skipped, never
+raised — callers must handle receiving **fewer than `n`, including zero**: confirmed
+live that 100% of the corpus's 3,057 URLs are currently expired (root cause precisely
+identified — see
+[failure mode #10](./generation-failure-modes.md#10-reference-ad-image-urls-are-cryptographically-expired-not-blocked-or-rate-limited)),
+with the durable fix (re-scraping fresh URLs) currently blocked on an external Apify
+account usage limit, not on anything in this codebase.
 
 ### 3. `style_reference.py` — `derive_style_brief(guide)`
 

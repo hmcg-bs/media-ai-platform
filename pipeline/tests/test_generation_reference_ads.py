@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from pipeline.generation.guide import DirectionalSignal, GenerationGuide
-from pipeline.generation.reference_ads import get_top_reference_ads
+from pipeline.generation.reference_ads import _is_url_expired, get_top_reference_ads
 
 
 def _matrix_row(ad_id: str, days_active: int, collation: int, variants: int, **extra) -> dict:
@@ -186,3 +186,54 @@ class TestDirectiveAlignmentRanking:
             results = get_top_reference_ads(guide, n=2, matrix_file=matrix_file, ads_file=ads_file)
 
         assert len(results) == 2  # relaxed back to all candidates, not zero
+
+
+class TestIsUrlExpired:
+    """Root cause found live (2026-08-29): every image_urls entry is a
+    Facebook CDN URL with a signed expiry embedded in its own `oe` query
+    param -- decoded directly, confirmed 100% of the real 3,057-ad corpus
+    had already expired. Not a rate limit or User-Agent block; no retry or
+    header change fixes a cryptographically expired URL."""
+
+    def test_detects_an_expired_url(self):
+        # oe=00000001 -> 1970-01-01T00:00:01Z, unambiguously in the past.
+        url = "https://scontent.example.fna.fbcdn.net/img.jpg?_nc_cat=1&oe=00000001"
+        assert _is_url_expired(url) is True
+
+    def test_does_not_flag_a_far_future_url(self):
+        # oe=7FFFFFFF -> year 2038, unambiguously not expired today.
+        url = "https://scontent.example.fna.fbcdn.net/img.jpg?_nc_cat=1&oe=7FFFFFFF"
+        assert _is_url_expired(url) is False
+
+    def test_url_with_no_oe_param_is_never_flagged(self):
+        """Absence of the signal is not evidence of staleness -- only a
+        confirmed-expired timestamp counts."""
+        assert _is_url_expired("https://example.com/img.jpg?foo=bar") is False
+
+    def test_malformed_oe_param_is_never_flagged(self):
+        assert _is_url_expired("https://example.com/img.jpg?oe=not-hex") is False
+
+
+class TestSkipsExpiredUrlsWithoutNetworkCall:
+    def test_expired_candidate_never_reaches_urlopen(self, tmp_path):
+        rows = [
+            _matrix_row("expired", 200, 5, 4, dominant_color="blue", background_style="Busy"),
+        ]
+        ads = [
+            {
+                "ad_archive_id": "expired",
+                "image_urls": ["https://scontent.example.fna.fbcdn.net/i.jpg?oe=00000001"],
+            },
+        ]
+        matrix_file, ads_file = tmp_path / "matrix.json", tmp_path / "ads.json"
+        matrix_file.write_text(json.dumps(rows))
+        ads_file.write_text(json.dumps(ads))
+
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            mock_urlopen.side_effect = AssertionError("must not be called for an expired URL")
+            results = get_top_reference_ads(
+                _empty_guide(), n=1, matrix_file=matrix_file, ads_file=ads_file
+            )
+
+        assert results == []
+        mock_urlopen.assert_not_called()
