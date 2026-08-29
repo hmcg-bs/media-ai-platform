@@ -29,8 +29,16 @@ signal, it fell through to a hardcoded default of "a clean, high-contrast
 studio background" -- the exact thing the data says to avoid, confirmed live
 by every one of the top 5 real ads by composite success score having
 `background_style=Busy`, none plain/studio. Now surfaces avoid-signals
-explicitly and prefers a StyleBrief (style_reference.py, grounded in real
-reference ads) over the guide-only description whenever one is available.
+explicitly and prefers a StyleBrief (style_reference.py) over the guide-only
+description whenever one is available.
+
+Round 7 (2026-08-29): style_reference.py stopped grounding the StyleBrief in
+reference-ad images -- the guide's own statistics are now authoritative for
+every dimension they measure, and reference ads moved to a post-generation
+comparison role (feature_fidelity.py) instead of a generation-input one.
+`_scene_description`'s own logic here is unaffected by that move (it already
+just consumes whatever StyleBrief it's given), but the docstring above is
+corrected so it doesn't misstate where the StyleBrief's content comes from.
 """
 
 from __future__ import annotations
@@ -101,10 +109,10 @@ def _guide_to_scene_description(guide: GenerationGuide) -> str:
 
 
 def _scene_description(guide: GenerationGuide, style_brief: StyleBrief | None) -> str:
-    """A StyleBrief is grounded in real reference-ad images (style_reference.py)
-    -- prefer it outright over the guide-only description when available,
-    rather than trying to merge two potentially-conflicting scene texts into
-    one prompt."""
+    """A StyleBrief (style_reference.py) is the guide's own directives already
+    translated into concrete creative language -- prefer it outright over the
+    guide-only description when available, rather than trying to merge two
+    potentially-conflicting scene texts into one prompt."""
     if style_brief is not None:
         palette = ", ".join(style_brief.dominant_color_palette) or "no specific palette"
         return f"{style_brief.background_treatment} (color palette: {palette})"

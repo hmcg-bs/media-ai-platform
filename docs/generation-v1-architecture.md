@@ -43,19 +43,24 @@ parameters between calls.
 
 ```
 1. extract_generation_guide()          -- pipeline/generation/guide.py
-2. get_top_reference_ads()             -- pipeline/generation/reference_ads.py
-3. derive_style_brief()                -- pipeline/generation/style_reference.py
+2. get_top_reference_ads(guide)        -- pipeline/generation/reference_ads.py
+3. derive_style_brief(guide)           -- pipeline/generation/style_reference.py
 4. draft_copy()                        -- pipeline/generation/copywriter.py
 5. generate_background_and_product()   -- pipeline/generation/background.py + masking.py
-   ┌─── regeneration loop (capped at MAX_REGENERATION_PASSES = 2) ───┐
+   ┌─── regeneration loop (capped at MAX_REGENERATION_PASSES = 2) ────────────┐
    │ 6. plan_layout()                  -- pipeline/generation/layout.py       │
    │ 7. compose_ad()                   -- pipeline/generation/compositor.py   │
    │ 8. review_blend()                 -- pipeline/generation/blend.py        │
    │ 9. review_ad()                    -- pipeline/generation/reviewer.py     │
+   │ 10. review_feature_fidelity()     -- pipeline/generation/feature_fidelity.py │
    │    if not passed and not exhausted: re-run step 5 with feedback folded  │
    │    into `intention`, then loop back to step 6                          │
    └──────────────────────────────────────────────────────────────────────┘
 ```
+
+Note step 2 now depends on step 1's output (`guide`) — Round 7 added directive-alignment
+scoring to reference-ad selection, so it needs the guide's directives to check candidate
+ads against before step 3 ever runs.
 
 ### 1. `guide.py` — `extract_generation_guide()`
 
@@ -80,38 +85,54 @@ Reads from `data/model_training_report_fresh.json` and `data/success_score_repor
 by default — both pre-computed artifacts from wayfinder map #1's training runs, not
 recomputed here.
 
-### 2. `reference_ads.py` — `get_top_reference_ads(n=3)`
+### 2. `reference_ads.py` — `get_top_reference_ads(guide, n=3)`
 
-Retrieval-grounded generation's data source (Round 5): fetches the real top-`n` ads by
-composite success score, images included, restricted to ads with genuine
-`creative_features` (not NaN-filled defaults — see
-[failure mode #4](./generation-failure-modes.md#4-pandas-nan-truthiness-silently-passed-stale-rows-through-the-reference-ad-filter)).
-Each successfully-fetched ad becomes a `ReferenceAd` (id, composite score, image bytes,
-dominant color, background style, hook framework). A per-ad image fetch failure (stale
-Facebook CDN URL) is logged and skipped, never raised — callers must handle receiving
-**fewer than `n`, including zero** (see
-[failure mode: reference-ad corpus staleness](./generation-failure-modes.md#round-6-live-verification-findings-not-yet-fixed)).
+**Rescoped in Round 7** (2026-08-29): reference ads no longer feed the generation
+prompt at all (see section 3) — they're now ground-truth exemplars for the
+post-generation fidelity check (section 10). That changes what "top" has to mean: a
+reference ad is only useful for checking replication if it's a genuine embodiment of
+the guide's own directives, not merely a high scorer for unrelated reasons (price,
+brand recognition, small-sample luck). `_directive_alignment_score(row, guide)` scores
+each candidate ad: **+1** for every categorical guide directive whose `higher_is_better`
+value the ad's own extracted feature actually has, **-1** for every directive whose
+*discouraged* (`lower_is_better`) value it has. Candidates are ranked by
+`(alignment_score desc, composite_success_score desc)` and filtered to
+`alignment_score >= min_alignment` (default 1 — "can't just be a random ad"), relaxed
+back to 0 automatically (logged) if too few real ads clear that bar, since a genuine
+corpus-coverage gap must degrade gracefully rather than returning nothing to compare
+against.
 
-### 3. `style_reference.py` — `derive_style_brief()`
+Each successfully-fetched ad becomes a `ReferenceAd` (id, composite score,
+**alignment score**, image bytes, dominant color, background style, hook framework). A
+per-ad image fetch failure (stale Facebook CDN URL) is logged and skipped, never
+raised — callers must handle receiving **fewer than `n`, including zero** (confirmed
+live: a full run once saw 100% of 3,057 candidates 403 — see
+[the Round 6 live-verification findings](./generation-failure-modes.md#round-6-live-verification-findings)) —
+reconfirmed again live during Round 7 (same 100% failure rate).
 
-The agent that turns "real winning ads" + "abstract statistical directives" into one
-concrete, actionable `StyleBrief` (background treatment, color palette, whether text
-needs a background band, font personality, CTA style notes). Two paths:
+### 3. `style_reference.py` — `derive_style_brief(guide)`
 
-- **Reference ads available**: one `GenAIClient.extract_structured_multi_image()` call —
-  the real reference-ad images (as multiple `Part`s) plus the guide's directive summary,
-  asking the model to describe what the reference ads *actually do visually* and propose
-  a brief that could plausibly belong to the same set.
-- **Reference ads empty** (all candidates stale): a text-only fallback grounded in the
-  guide alone, with an explicit instruction never to default to a plain white studio
-  background unless a directive supports it — the exact bug
-  ([failure mode #2](./generation-failure-modes.md#2-negative-lower_is_better-guide-directives-were-silently-dropped))
-  this module's design specifically closes off.
+**Rescoped in Round 7.** This agent used to feed reference-ad *images* into a vision
+call and ask it to independently read off "background treatment, color choices" —
+dimensions the guide already has a rigorous, larger-sample SHAP/Cox answer for
+(`dominant_color`, `background_style`, `contrast_ratio_type`, ...). Letting a vision
+model re-derive an already-measured dimension from a handful of images risked a small,
+uncontrolled qualitative sample overriding a real statistical one — exactly the
+ungrounded-LLM-judgment failure mode this whole project is built to avoid wherever a
+deterministic/statistical answer already exists (CLAUDE.md's own stated principle).
 
-`font_personality` is a deliberate, documented exception to "ground everything in real
-data": Step 2's extraction never measured typeface identity, so there is no statistical
-signal for this field to defer to — it's the vision model's qualitative read of the
-reference images, kept visibly separate from the real statistical directives.
+The agent is now **text-only** and does two things only:
+1. **Translates** each measured, direction-reliable guide directive into concrete,
+   renderable creative language, anchored to the directive as ground truth — the
+   prompt states explicitly that the directives are "the authoritative source for any
+   dimension they name," not something to independently re-derive.
+2. **Fills `font_personality`** — the one dimension Step 2's extraction genuinely never
+   measures (no font-family feature exists anywhere in the schema) — as its own
+   qualitative judgment, kept visibly separate from the real statistical directives.
+
+Reference-ad images aren't gone from the pipeline; they moved to the fidelity check
+(section 10), which uses them to verify the output *after* generation instead of
+(mis)informing what to generate beforehand.
 
 ### 4. `copywriter.py` — `draft_copy()`
 
@@ -213,16 +234,34 @@ the ad avoid a green-dominant palette)? Also flags general visual-quality proble
 (garbled text, a duplicated product, awkward cropping) and recommends regeneration only
 for a real defect, not stylistic disagreement with a low-magnitude directive.
 
+### 10. `feature_fidelity.py` — `review_feature_fidelity()`
+
+**New in Round 7.** The comparison role reference ads were rescoped into: does the
+*final*, fully-composited ad actually replicate the feature pattern the guide's
+statistics found, checked against the real, directive-aligned exemplars
+`reference_ads.py` selected — rather than assumed from having generated "in the
+direction of" the directives. One `GenAIClient.extract_structured_multi_image()` call:
+the reference-ad images plus the final ad image (last in the list), asked to judge,
+per checkable directive, whether the generated ad visually replicates the same trait
+the reference ads share. Returns a `FeatureFidelityReview` (`replicated_directives`,
+`missed_directives`, `overall_fidelity_pass`, plus a `checked` flag).
+
+Degrades gracefully when `reference_ads` is empty (corpus image staleness, same
+failure mode section 2 describes): returns `checked=False, overall_fidelity_pass=True`
+without calling the model at all — there's nothing to compare against, and that must
+never block generation or fabricate a verdict.
+
 ### The regeneration loop
 
-`generate_cold_start_ad()` runs steps 6-9 up to `MAX_REGENERATION_PASSES + 1` times.
-`passed = review.overall_pass and blend_review.blends_well` — both gates must clear
-independently; a passing content review does not short-circuit a failing blend check, or
-vice versa. On a failed-but-not-exhausted pass, both agents' feedback is folded into the
-`intention` string passed to a **fresh** `generate_background_and_product()` call (a
-targeted re-edit, not a full restart from the original product photo's original
-background) — the next loop iteration also re-runs `plan_layout()`, since a re-edited
-frame may place the product differently.
+`generate_cold_start_ad()` runs steps 6-10 up to `MAX_REGENERATION_PASSES + 1` times.
+`passed = review.overall_pass and blend_review.blends_well and
+fidelity_review.overall_fidelity_pass` — all three gates must clear independently; any
+one failing does not get short-circuited by the other two passing. On a
+failed-but-not-exhausted pass, all three agents' feedback (whichever flagged a problem)
+is folded into the `intention` string passed to a **fresh**
+`generate_background_and_product()` call (a targeted re-edit, not a full restart from
+the original product photo's original background) — the next loop iteration also
+re-runs `plan_layout()`, since a re-edited frame may place the product differently.
 
 ---
 
@@ -269,8 +308,8 @@ explicit scope of map #42, not yet built.
 ```
 pipeline/generation/
 ├── guide.py             Cox/SHAP models -> GenerationGuide (directional signals)
-├── reference_ads.py      Top-N real ads by composite success score, images included
-├── style_reference.py    Reference ads + guide -> StyleBrief
+├── reference_ads.py      guide -> directive-aligned top-N real ads, images included (Round 7 rescope)
+├── style_reference.py    guide -> StyleBrief (text-only; Round 7 dropped reference-ad images)
 ├── copywriter.py          Intention + guide -> AdCopy
 ├── background.py          StyleBrief + product photo -> background+product image (orchestrates masking.py)
 ├── masking.py             RGBA alpha matte -> Flux-Fill-convention inpaint mask (Round 6)
@@ -279,6 +318,7 @@ pipeline/generation/
 ├── compositor.py          AdSpec -> final PNG bytes (deterministic PIL drawing)
 ├── blend.py               Visual-cohesion-only review of the composited result
 ├── reviewer.py            Guide-adherence + general quality review of the composited result
+├── feature_fidelity.py    Final ad + reference ads -> does the output replicate the guide's pattern? (Round 7)
 ├── pipeline.py            generate_cold_start_ad() -- orchestrates all of the above
 ├── cli.py                 Local CLI entry point
 └── assets/fonts/          Bundled DejaVu TrueType files (Round 5)

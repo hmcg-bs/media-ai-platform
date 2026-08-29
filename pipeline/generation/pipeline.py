@@ -1,9 +1,17 @@
 """Orchestrates Generation v1's cold-start path end to end: guide extraction
--> reference-ad retrieval -> style-brief agent -> copywriter agent -> masked
-background inpaint (Round 6: background-remover + Flux Fill, see
-pipeline/generation/background.py) -> layout agent -> deterministic
-compositing -> blend-cohesion agent + guide-adherence reviewer agent, with a
-capped regeneration loop.
+-> directive-aligned reference-ad retrieval -> style-brief agent (guide-only,
+text) -> copywriter agent -> masked background inpaint (Round 6:
+background-remover + Flux Fill, see pipeline/generation/background.py) ->
+layout agent -> deterministic compositing -> blend-cohesion agent +
+guide-adherence reviewer agent + feature-fidelity agent (Round 7: does the
+result actually replicate the reference ads' confirmed traits), with a
+capped regeneration loop gated on all three.
+
+Round 7 (2026-08-29) moved reference ads out of the generation-input path
+(style_reference.py no longer sees their images -- the guide's own
+statistics are authoritative for anything they measure) and into a
+post-generation comparison role (feature_fidelity.py) instead. See both
+modules' docstrings for the full reasoning.
 
 This is the cold-start entry point specifically (raw product photo +
 intention, no existing draft) -- the re-render path (existing draft ad ->
@@ -24,9 +32,10 @@ from pipeline.generation.blend import BlendReview, review_blend
 from pipeline.generation.compositor import compose_ad
 from pipeline.generation.copywriter import AdCopy, draft_copy
 from pipeline.generation.elements import AdSpec, ElementSpec
+from pipeline.generation.feature_fidelity import FeatureFidelityReview, review_feature_fidelity
 from pipeline.generation.guide import GenerationGuide, extract_generation_guide
 from pipeline.generation.layout import LayoutPlan, plan_layout
-from pipeline.generation.reference_ads import get_top_reference_ads
+from pipeline.generation.reference_ads import ReferenceAd, get_top_reference_ads
 from pipeline.generation.reviewer import AdReview, review_ad
 from pipeline.generation.style_reference import StyleBrief, derive_style_brief
 from pipeline.logger import get_logger
@@ -44,6 +53,7 @@ class GenerationResult:
     style_brief: StyleBrief
     review_history: list[AdReview] = field(default_factory=list)
     blend_review_history: list[BlendReview] = field(default_factory=list)
+    fidelity_review_history: list[FeatureFidelityReview] = field(default_factory=list)
     passes_used: int = 0
     ai_generated_disclosure: bool = True  # Meta's 2026 disclosure rule (issue #36's Notes)
 
@@ -59,10 +69,10 @@ def _layout_from_plan(
     fixed fractions.
 
     Round 5 fix: font/colors used to be hardcoded (#ffffff/#f0f0f0/#1a1a1a
-    for every ad, every run) regardless of what the guide or any reference
-    ad suggested -- confirmed live as the reason every generated ad "looked
-    the same." Now sourced from the style brief, which is itself grounded in
-    real reference ads, not invented per-element."""
+    for every ad, every run) regardless of what the guide suggested --
+    confirmed live as the reason every generated ad "looked the same." Now
+    sourced from the style brief, which (as of Round 7) is itself derived
+    from the guide's own statistical directives, not invented per-element."""
     band = style_brief.text_needs_background_band
     band_color = style_brief.text_background_band_color_hex
     font = style_brief.font_personality
@@ -112,6 +122,7 @@ def generate_cold_start_ad(
     bg_remover_client: BackgroundRemoverClient | None = None,
     flux_fill_client: FluxFillClient | None = None,
     style_brief: StyleBrief | None = None,
+    reference_ads: list[ReferenceAd] | None = None,
     max_passes: int = MAX_REGENERATION_PASSES,
 ) -> GenerationResult:
     settings = get_settings()
@@ -120,12 +131,20 @@ def generate_cold_start_ad(
     flux_fill_client = flux_fill_client or FluxFillClient()
     guide = guide or extract_generation_guide()
 
+    # Retrieved regardless of whether style_brief is injected -- these ads no
+    # longer feed the style brief (see style_reference.py), they're the
+    # ground-truth exemplars feature_fidelity.py checks the final result
+    # against, so they're needed even when style_brief is supplied directly.
+    if reference_ads is None:
+        reference_ads = get_top_reference_ads(guide, n=N_REFERENCE_ADS)
+        logger.info(
+            "generation_reference_ads_retrieved", n=len(reference_ads),
+            alignment_scores=[a.alignment_score for a in reference_ads],
+        )
+
     if style_brief is None:
-        reference_ads = get_top_reference_ads(n=N_REFERENCE_ADS)
-        logger.info("generation_reference_ads_retrieved", n=len(reference_ads))
         style_brief = derive_style_brief(
-            genai_client, model=settings.gemini_deep_model,
-            reference_ads=reference_ads, guide=guide,
+            genai_client, model=settings.gemini_deep_model, guide=guide,
         )
         logger.info(
             "generation_style_brief_derived",
@@ -146,6 +165,7 @@ def generate_cold_start_ad(
 
     review_history: list[AdReview] = []
     blend_history: list[BlendReview] = []
+    fidelity_history: list[FeatureFidelityReview] = []
     final_bytes = b""
     for attempt in range(max_passes + 1):
         layout_plan = plan_layout(
@@ -170,14 +190,30 @@ def generate_cold_start_ad(
             ad_image_bytes=final_bytes, guide=guide,
         )
         review_history.append(review)
+
+        fidelity_review = review_feature_fidelity(
+            genai_client, model=settings.gemini_deep_model,
+            final_ad_image_bytes=final_bytes, reference_ads=reference_ads, guide=guide,
+        )
+        fidelity_history.append(fidelity_review)
+
         logger.info(
             "generation_review_complete", attempt=attempt,
             overall_pass=review.overall_pass, blends_well=blend_review.blends_well,
+            fidelity_pass=fidelity_review.overall_fidelity_pass,
             regeneration_recommended=review.regeneration_recommended,
         )
 
-        passed = review.overall_pass and blend_review.blends_well
-        needs_regen = review.regeneration_recommended or not blend_review.blends_well
+        passed = (
+            review.overall_pass
+            and blend_review.blends_well
+            and fidelity_review.overall_fidelity_pass
+        )
+        needs_regen = (
+            review.regeneration_recommended
+            or not blend_review.blends_well
+            or not fidelity_review.overall_fidelity_pass
+        )
         if passed or not needs_regen:
             break
         if attempt >= max_passes:
@@ -188,7 +224,12 @@ def generate_cold_start_ad(
         # extra context, rather than a full from-scratch restart. The next
         # loop iteration re-runs the layout agent too, since a re-edited
         # frame may place the product differently.
-        reasons = [r for r in (review.regeneration_reason, blend_review.notes) if r]
+        reasons = [
+            r for r in (
+                review.regeneration_reason, blend_review.notes,
+                None if fidelity_review.overall_fidelity_pass else fidelity_review.notes,
+            ) if r
+        ]
         background_and_product = generate_background_and_product(
             bg_remover_client, flux_fill_client, product_photo_bytes,
             intention=f"{intention} (fix: {'; '.join(reasons)})",
@@ -201,5 +242,6 @@ def generate_cold_start_ad(
         style_brief=style_brief,
         review_history=review_history,
         blend_review_history=blend_history,
+        fidelity_review_history=fidelity_history,
         passes_used=len(review_history) - 1,
     )

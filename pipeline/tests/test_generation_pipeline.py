@@ -12,9 +12,11 @@ from PIL import Image
 
 from pipeline.generation.blend import BlendReview
 from pipeline.generation.copywriter import AdCopy
+from pipeline.generation.feature_fidelity import _FidelityLLMResult
 from pipeline.generation.guide import GenerationGuide
 from pipeline.generation.layout import BoundingBox, LayoutPlan
 from pipeline.generation.pipeline import _layout_from_plan, generate_cold_start_ad
+from pipeline.generation.reference_ads import ReferenceAd
 from pipeline.generation.reviewer import AdReview
 from pipeline.generation.style_reference import StyleBrief
 
@@ -115,12 +117,23 @@ class _FakeImageResponse:
         self.parts = [_FakePart(_FakeInlineData(image_bytes))]
 
 
+def _passing_fidelity_result() -> _FidelityLLMResult:
+    return _FidelityLLMResult(
+        replicated_directives=[], missed_directives=[],
+        overall_fidelity_pass=True, notes="",
+    )
+
+
 class _FakeModels:
     """Routes generate_content calls by schema type in config, mimicking real
     google-genai dispatch closely enough for these orchestration tests."""
 
-    def __init__(self, copy: AdCopy, layout: LayoutPlan, blend: BlendReview, review: AdReview):
+    def __init__(
+        self, copy: AdCopy, layout: LayoutPlan, blend: BlendReview, review: AdReview,
+        fidelity: _FidelityLLMResult | None = None,
+    ):
         self._copy, self._layout, self._blend, self._review = copy, layout, blend, review
+        self._fidelity = fidelity or _passing_fidelity_result()
         self.calls: list[dict] = []
 
     def generate_content(self, **kwargs):
@@ -135,6 +148,8 @@ class _FakeModels:
             return _FakeStructuredResponse(self._blend)
         if schema is AdReview:
             return _FakeStructuredResponse(self._review)
+        if schema is _FidelityLLMResult:
+            return _FakeStructuredResponse(self._fidelity)
         raise AssertionError(f"unexpected schema in test fake: {schema}")
 
 
@@ -187,7 +202,7 @@ class TestGenerateColdStartAd:
             _blank_png(), intention="test", product_name="Test Product",
             guide=_empty_guide(), genai_client=genai_client,
             bg_remover_client=bg_remover_client, flux_fill_client=flux_fill_client,
-            style_brief=_style_brief(), max_passes=2,
+            style_brief=_style_brief(), reference_ads=[], max_passes=2,
         )
 
         assert result.passes_used == 0
@@ -211,7 +226,7 @@ class TestGenerateColdStartAd:
             _blank_png(), intention="test", product_name="Test Product",
             guide=_empty_guide(), genai_client=genai_client,
             bg_remover_client=bg_remover_client, flux_fill_client=flux_fill_client,
-            style_brief=_style_brief(), max_passes=2,
+            style_brief=_style_brief(), reference_ads=[], max_passes=2,
         )
 
         assert result.passes_used == 2
@@ -238,8 +253,48 @@ class TestGenerateColdStartAd:
             _blank_png(), intention="test", product_name="Test Product",
             guide=_empty_guide(), genai_client=genai_client,
             bg_remover_client=bg_remover_client, flux_fill_client=flux_fill_client,
-            style_brief=_style_brief(), max_passes=1,
+            style_brief=_style_brief(), reference_ads=[], max_passes=1,
         )
 
         assert result.passes_used == 1
         assert len(flux_fill_client.calls) == 2
+
+    def test_regenerates_when_fidelity_check_fails_even_if_review_and_blend_pass(self):
+        """Round 7: a third, independent gate. Passing content review and
+        blend cohesion must not short-circuit the loop if the generated ad
+        doesn't actually replicate the reference ads' confirmed traits."""
+        copy = AdCopy(headline="H", secondary_copy="S", cta_text="Shop", price_offer_text=None)
+        layout = _layout_plan()
+        blend = BlendReview(blends_well=True, issues=[], notes="")
+        review = AdReview(
+            overall_pass=True, directive_checks=[], visual_quality_issues=[],
+            regeneration_recommended=False,
+        )
+        fidelity = _FidelityLLMResult(
+            replicated_directives=[], missed_directives=["background_style=Busy"],
+            overall_fidelity_pass=False,
+            notes="background is plain, not busy like the reference ads",
+        )
+        fake_models = _FakeModels(copy, layout, blend, review, fidelity=fidelity)
+        genai_client = _wrap_genai(fake_models)
+        bg_remover_client = _FakeBgRemoverClient(_blank_png())
+        flux_fill_client = _FakeFluxFillClient(_blank_png())
+        reference_ads = [
+            ReferenceAd(
+                ad_id="a1", composite_score=1.0, alignment_score=1, image_bytes=b"ref-jpeg",
+                image_mime_type="image/jpeg", dominant_color="blue",
+                background_style="Busy", hook_framework="Direct Offer",
+            )
+        ]
+
+        result = generate_cold_start_ad(
+            _blank_png(), intention="test", product_name="Test Product",
+            guide=_empty_guide(), genai_client=genai_client,
+            bg_remover_client=bg_remover_client, flux_fill_client=flux_fill_client,
+            style_brief=_style_brief(), reference_ads=reference_ads, max_passes=1,
+        )
+
+        assert result.passes_used == 1
+        assert len(flux_fill_client.calls) == 2
+        assert result.fidelity_review_history[0].checked is True
+        assert result.fidelity_review_history[0].overall_fidelity_pass is False

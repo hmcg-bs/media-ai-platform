@@ -37,8 +37,9 @@ generated before this fix used that same fallback, not a real typeface --
 which is exactly why every ad "looked the same." Now loads real bundled
 TrueType files (pipeline/generation/assets/fonts/, DejaVu family, free/
 redistributable -- see LICENSE_DEJAVU there) keyed by a font_personality the
-style-reference agent assigns from real reference ads, and raises loudly
-(not a silent fallback) if a bundled file goes missing, so this specific
+style-reference agent assigns as its own qualitative judgment (Round 7:
+no longer from reference-ad images), and raises loudly (not a silent
+fallback) if a bundled file goes missing, so this specific
 failure mode can never again hide behind a default that still technically
 "works."
 """

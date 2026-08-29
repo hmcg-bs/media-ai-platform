@@ -16,7 +16,9 @@ ElementType = Literal[
 # Round 5 (2026-08-28): a real, if qualitative, font choice -- nothing in the
 # corpus's own extraction ever measured typeface identity, so this isn't a
 # statistical directive the way color/layout are; it's the style-reference
-# agent's read of what real winning ads look like (style_reference.py).
+# agent's own qualitative judgment, given the guide's other directives
+# (style_reference.py) -- never grounded in reference-ad images (Round 7
+# moved those to feature_fidelity.py's post-generation comparison instead).
 # Each maps to one bundled font file (pipeline/generation/assets/fonts/) --
 # never a bare font-family name, which silently fails to resolve on this
 # platform and previously masked itself by falling back to PIL's tiny

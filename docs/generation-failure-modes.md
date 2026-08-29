@@ -222,7 +222,49 @@ which is what caught this in the first place).
 
 ---
 
-## Round 6 live-verification findings (not yet fixed)
+## 9. Reference-ad images were guiding generation, not verifying it (architecture correction, not a bug)
+
+**Symptom**: none directly observable in output quality, but a real design tension: the
+style-brief agent (`style_reference.py`) asked a vision model to independently read
+"background treatment, color choices" off 3 reference-ad images — dimensions
+(`dominant_color`, `background_style`) the guide already has a rigorous, much
+larger-sample SHAP/Cox answer for.
+
+**Root cause**: a small, uncontrolled qualitative sample (3 images, often 0 given
+corpus staleness) was positioned to potentially override or dilute a real statistical
+finding — exactly the ungrounded-LLM-judgment failure mode this project is built to
+avoid wherever a deterministic/statistical answer already exists (CLAUDE.md's own
+principle). Surfaced by direct user critique of the architecture, not a live failure.
+
+**Fix (Round 7, 2026-08-29)**: rescoped reference ads out of the generation-input path
+entirely and into a post-generation comparison role:
+- `style_reference.py::derive_style_brief()` is now text-only, guide-directed — the
+  guide's directives are authoritative for every dimension they cover; the model's job
+  narrows to translating them into concrete creative language plus filling
+  `font_personality` (the one genuinely unmeasured dimension).
+- `reference_ads.py::get_top_reference_ads()` gained directive-alignment scoring
+  (`_directive_alignment_score`): a candidate ad must itself exhibit the guide's
+  confirmed good traits (not just score well for unrelated reasons) to be selected,
+  ranked `(alignment desc, composite_score desc)`, with a `min_alignment` floor that
+  relaxes automatically if too few real ads clear it.
+- New `feature_fidelity.py::review_feature_fidelity()` — a post-generation vision call
+  comparing the final ad against the now-representative reference ads, checking whether
+  the output actually replicated the confirmed pattern. Wired into the regeneration
+  loop as a third independent gate alongside blend and guide-adherence review.
+
+**Regression tests**: `pipeline/tests/test_generation_style_reference.py` (text-only,
+no images), `pipeline/tests/test_generation_reference_ads.py::TestDirectiveAlignmentRanking`,
+`pipeline/tests/test_generation_feature_fidelity.py`,
+`pipeline/tests/test_generation_pipeline.py::test_regenerates_when_fidelity_check_fails_even_if_review_and_blend_pass`.
+
+**Confirmed live**: re-ran `derive_style_brief()` against the real guide — with a
+`dominant_color=green: lower_is_better` directive live, the resulting palette
+(`#007bff`, `#ffffff`, `#f8f9fa`, `#6c757d`) correctly avoids green, derived purely
+from guide text with zero images. Alignment scoring verified against the full
+3,057-row corpus offline: a real, meaningful score distribution (-3 to +1), top
+candidates by `(alignment, composite_score)` genuinely embody a confirmed directive.
+
+## Round 6 live-verification findings
 
 Two findings surfaced by the final full end-to-end verification run
 (`smoke_generated_ad_v11.png`), kept here rather than filed as bugs since neither is a
@@ -230,16 +272,23 @@ code defect — both are real, honest limitations worth tracking:
 
 - **Reference-ad corpus staleness has gotten worse, not better.** 100% of the 3,057-ad
   corpus's candidate image URLs returned HTTP 403 in this run, versus the ~54% figure
-  documented in earlier sessions. `reference_ads.py`'s designed fallback (skip and
-  continue) worked correctly — the run completed — but this means the retrieval-grounded
-  style system (see failure mode #2's fix) is currently *never* actually grounded in real
-  images in practice, only in the text-only fallback path. Worth a dedicated
-  investigation (is Facebook's CDN policy stricter now, or is this corpus's URL set
-  simply older) before assuming Round 5's retrieval-grounding is providing its intended
-  benefit at all in production.
-- **The text-only style fallback under-performs the image-grounded path.** With zero
-  reference ads available, this run's background came out "plain, light-colored
-  studio-like" per the reviewer — the opposite of the busy/real-world scene both the
-  guide and the fallback prompt explicitly call for. This is evidence, not just theory,
-  that Round 5's image-grounded retrieval path was doing real, non-cosmetic work — the
-  text-only fallback alone is not an adequate substitute.
+  documented in earlier sessions — reconfirmed again live during Round 7's own smoke
+  test (100% of candidates 403'd a second time). `reference_ads.py`'s designed fallback
+  (skip and continue) worked correctly both times — the run completed — but this means
+  the fidelity check (and, before Round 7, the style-brief system) is currently *never*
+  actually grounded in real images in practice. Worth a dedicated investigation (is
+  Facebook's CDN policy stricter now, or is this corpus's URL set simply older) before
+  assuming the reference-ad mechanism is providing its intended benefit at all in
+  production — this is now the single highest-leverage open gap in Generation v1.
+- **The (then-)text-only style fallback under-performed the (then-)image-grounded
+  path** — a Round 6 finding, superseded in framing by Round 7 (see bug #9 above):
+  with zero reference ads available, that run's background came out "plain,
+  light-colored studio-like" per the reviewer, the opposite of what the guide's own
+  directives call for. At the time this was read as evidence the image-grounded path
+  mattered; Round 7's rescope means style derivation is now *always* the text-only
+  guide-directed path (there is no image-grounded alternative to compare against
+  anymore), so the live-verification comparison above (green correctly avoided,
+  purely from guide text) is the more relevant, current evidence that the text-only
+  path alone can produce a directive-faithful result. Whether *feature_fidelity.py's*
+  own image comparison degrades usefully with 0 reference ads (it does, by design —
+  see bug #9) is the analogous open question going forward.

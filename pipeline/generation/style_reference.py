@@ -1,15 +1,29 @@
-"""Style-reference agent (Generation v1, round 5): looks at real, currently-
-successful ads (reference_ads.py) alongside the abstract guide directives,
-and produces one concrete, actionable style brief -- grounding generation in
-what actually wins, not statistics alone.
+"""Style-brief agent (Generation v1). Round 7 (2026-08-29) rewrite: this
+module used to feed real reference-ad *images* into a vision call and ask it
+to independently read off "background treatment, color choices" -- but those
+are dimensions the guide (guide.py) already has a rigorous, larger-sample
+SHAP/Cox answer for (`dominant_color`, `background_style`,
+`contrast_ratio_type`, ...). Letting a vision model re-derive an already-
+measured dimension from 3 (often 0, given corpus image staleness) cherry-
+picked images let a small, uncontrolled qualitative sample override or
+dilute a real statistical one -- exactly the kind of ungrounded LLM judgment
+this project is built to avoid wherever a deterministic/statistical answer
+already exists (CLAUDE.md's own stated principle).
 
-font_personality is a deliberate exception to "ground everything in real
-data": nothing in this corpus's own extraction ever measured typeface
-identity (Step 2 captured layout/size/alignment, not font family), so there
-is no historical "this font wins" signal for this agent to defer to the way
-there is for color/background. It's a qualitative read of the reference
-images by the vision model -- kept honest by being visibly separate from the
-guide's real statistical directives, not conflated with them.
+This agent's job is now narrower and text-only, in two parts:
+1. Translate each measured, direction-reliable guide directive into concrete,
+   renderable creative language (e.g. `background_style=Busy` -> a specific
+   kind of cluttered real-world scene) -- anchored to the directive as
+   ground truth, not re-derived from anything else.
+2. Make a qualitative call on `font_personality`, the one dimension Step 2's
+   extraction never measures at all (no font-family feature exists anywhere
+   in the schema) -- kept honestly separate from the guide's real
+   statistical directives, never conflated with them.
+
+Reference ads have not been dropped from the pipeline -- they moved to
+feature_fidelity.py, which uses them *after* generation to check whether the
+output actually replicates the guide's directives, rather than *before*
+generation to (mis)inform what those directives even are.
 """
 
 from __future__ import annotations
@@ -19,12 +33,6 @@ from pydantic import BaseModel
 from pipeline.clients.genai_client import GenAIClient
 from pipeline.generation.elements import FontPersonality
 from pipeline.generation.guide import GenerationGuide
-from pipeline.generation.reference_ads import ReferenceAd
-
-_FALLBACK_BACKGROUND = (
-    "a detailed, real-world lifestyle or contextual scene -- not a plain "
-    "studio background"
-)
 
 
 class StyleBrief(BaseModel):
@@ -36,72 +44,44 @@ class StyleBrief(BaseModel):
     cta_style_notes: str
 
 
-def _guide_summary(guide: GenerationGuide) -> str:
+def _directives_block(guide: GenerationGuide) -> str:
     lines = [
         f"- {s.dimension}={s.value or ''}: {s.direction}" for s in guide.visual_directives[:10]
     ]
     return "\n".join(lines) if lines else "(no strong directives)"
 
 
-def _reference_ads_summary(reference_ads: list[ReferenceAd]) -> str:
-    lines = [
-        f"- ad {a.ad_id} (score {a.composite_score:.2f}): "
-        f"dominant_color={a.dominant_color}, background_style={a.background_style}, "
-        f"hook={a.hook_framework}"
-        for a in reference_ads
-    ]
-    return "\n".join(lines) if lines else "(no reference ads available)"
-
-
 def derive_style_brief(
     genai_client: GenAIClient,
     *,
     model: str,
-    reference_ads: list[ReferenceAd],
     guide: GenerationGuide,
 ) -> StyleBrief:
-    """If `reference_ads` is empty (all candidates went stale -- see
-    reference_ads.py), falls back to a text-only call grounded in the guide
-    alone, with an explicit background_treatment that never defaults to
-    "studio" -- the guide's own data says that's `lower_is_better`, and the
-    old hardcoded fallback ignoring that is exactly the bug this module
-    exists to fix."""
-    directives_block = _guide_summary(guide)
-
-    if not reference_ads:
-        prompt = f"""No real reference ad images were available this run.
-Using ONLY the statistical directives below (correlational signals from a
-performance model, not hard rules), propose a concrete style brief for a
-supplement ad. Do NOT default to a plain white studio background unless a
-directive explicitly supports it -- that specific default has been
-confirmed to underperform in this category's own data.
+    """Text-only call -- no reference-ad images. The guide's directives are
+    the sole source of truth for every dimension they cover; the model's job
+    is to translate them into concrete creative language and fill in
+    font_personality, which has no statistical source to defer to."""
+    prompt = f"""Translate the data-driven directives below (correlational
+signals from a statistical model of what predicts ad performance in this
+category -- not hard rules, but the authoritative source for any dimension
+they name) into ONE concrete, renderable style brief for a supplement ad.
 
 Directives:
-{directives_block}
+{_directives_block(guide)}
 
-If no directive names a specific background style, use: {_FALLBACK_BACKGROUND}
+Rules:
+- Every directive above must be reflected concretely in your answer -- do
+  not substitute your own judgment for a dimension the directives already
+  cover (e.g. if a directive names a background_style or dominant_color,
+  your background_treatment/dominant_color_palette must embody that
+  directive, not some other stylistic choice).
+- Do NOT default to a plain white studio background unless a directive
+  explicitly supports it -- that specific default has been confirmed to
+  underperform in this category's own data.
+- font_personality has no statistical directive backing it (Step 2's
+  extraction never measures typeface) -- use your own best qualitative
+  judgment for what would suit this product and the directives above.
+- If no directive names a specific background style, use: a detailed,
+  real-world lifestyle or contextual scene -- not a plain studio background.
 """
-        return genai_client.extract_structured_text(model=model, prompt=prompt, schema=StyleBrief)
-
-    prompt = f"""These images are real, currently-successful supplement ads,
-ranked by a statistical performance model:
-{_reference_ads_summary(reference_ads)}
-
-Look at what they actually do visually -- background treatment, color
-choices, whether text sits directly on the image or on its own colored
-band, button/CTA styling.
-
-Separately, here is what the same statistical model found correlates with
-success in this category (correlational signals, not hard rules):
-{directives_block}
-
-Produce ONE concrete style brief for a NEW ad that could plausibly belong to
-this same successful set -- grounded in what you actually observe in the
-reference images above, not generic ad-design advice. If the reference ads
-mostly use busy/detailed/contextual backgrounds rather than plain studio
-backgrounds, say so explicitly in background_treatment.
-"""
-    images = [(ad.image_bytes, ad.image_mime_type) for ad in reference_ads]
-    return genai_client.extract_structured_multi_image(
-        model=model, prompt=prompt, images=images, schema=StyleBrief
-    )
+    return genai_client.extract_structured_text(model=model, prompt=prompt, schema=StyleBrief)

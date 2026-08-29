@@ -53,6 +53,7 @@ def main() -> None:
         "ai_generated_disclosure": result.ai_generated_disclosure,
         "review_history": [r.model_dump() for r in result.review_history],
         "blend_review_history": [r.model_dump() for r in result.blend_review_history],
+        "fidelity_review_history": [r.model_dump() for r in result.fidelity_review_history],
     }, indent=2))
 
     print(f"Wrote {args.out}")
@@ -62,6 +63,8 @@ def main() -> None:
     print(f"Passes used: {result.passes_used}")
     print(f"Final review: overall_pass={result.review_history[-1].overall_pass}")
     print(f"Final blend check: blends_well={result.blend_review_history[-1].blends_well}")
+    print(f"Final fidelity check: checked={result.fidelity_review_history[-1].checked} "
+          f"pass={result.fidelity_review_history[-1].overall_fidelity_pass}")
 
 
 if __name__ == "__main__":
