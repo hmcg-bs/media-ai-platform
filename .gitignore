@@ -79,3 +79,11 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Credentials — service-account keys for unattended runs (see
+# scripts/setup_service_account_auth.sh). These are long-lived credentials;
+# they must never be committed.
+secrets/
+*.sa.json
+service-account*.json
+application_default_credentials.json

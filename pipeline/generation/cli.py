@@ -49,11 +49,14 @@ def main() -> None:
     report_path.write_text(json.dumps({
         "ad_copy": result.ad_copy.model_dump(),
         "style_brief": result.style_brief.model_dump(),
+        "layout_plan": result.layout_plan.model_dump() if result.layout_plan else None,
         "passes_used": result.passes_used,
         "ai_generated_disclosure": result.ai_generated_disclosure,
         "review_history": [r.model_dump() for r in result.review_history],
         "blend_review_history": [r.model_dump() for r in result.blend_review_history],
         "fidelity_review_history": [r.model_dump() for r in result.fidelity_review_history],
+        "layout_validation_history": [r.model_dump() for r in result.layout_validation_history],
+        "duplicate_detection_history": [r.model_dump() for r in result.duplicate_detection_history],
     }, indent=2))
 
     print(f"Wrote {args.out}")
@@ -65,6 +68,9 @@ def main() -> None:
     print(f"Final blend check: blends_well={result.blend_review_history[-1].blends_well}")
     print(f"Final fidelity check: checked={result.fidelity_review_history[-1].checked} "
           f"pass={result.fidelity_review_history[-1].overall_fidelity_pass}")
+    n_duplicates_caught = sum(1 for d in result.duplicate_detection_history if d.duplicate_detected)
+    print(f"Duplicate-product checks: {len(result.duplicate_detection_history)} run, "
+          f"{n_duplicates_caught} caught and repaired")
 
 
 if __name__ == "__main__":

@@ -56,11 +56,19 @@ def derive_style_brief(
     *,
     model: str,
     guide: GenerationGuide,
+    variant_hint: str | None = None,
 ) -> StyleBrief:
     """Text-only call -- no reference-ad images. The guide's directives are
     the sole source of truth for every dimension they cover; the model's job
     is to translate them into concrete creative language and fill in
-    font_personality, which has no statistical source to defer to."""
+    font_personality, which has no statistical source to defer to.
+    `variant_hint` (Generation v2's multi-variant orchestrator): asks for
+    different incidental creative wording from a batch's other variants --
+    never permission to override a directive-covered dimension, which stays
+    the guide's statistical finding, not a menu option."""
+    variant_line = (
+        f"\n{variant_hint} Vary wording only, never the directives.\n" if variant_hint else ""
+    )
     prompt = f"""Translate the data-driven directives below (correlational
 signals from a statistical model of what predicts ad performance in this
 category -- not hard rules, but the authoritative source for any dimension
@@ -68,7 +76,7 @@ they name) into ONE concrete, renderable style brief for a supplement ad.
 
 Directives:
 {_directives_block(guide)}
-
+{variant_line}
 Rules:
 - Every directive above must be reflected concretely in your answer -- do
   not substitute your own judgment for a dimension the directives already

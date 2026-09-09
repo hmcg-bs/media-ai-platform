@@ -1,4 +1,4 @@
-# Generation v1: Known Failure Modes
+# Generation v1/v2: Known Failure Modes
 
 Catalog of confirmed bugs found and fixed in the ad-image generation pipeline
 (`pipeline/generation/*.py`, `pipeline/clients/genai_client.py`,
@@ -8,9 +8,13 @@ it was confirmed live. Mirrors [`docs/extraction-failure-modes.md`](./extraction
 own discipline — update this file whenever a new failure mode is root-caused; it's the
 durable record a future round should check first, before re-discovering the same bug.
 
+Entries #1-#12 are Generation v1 (through Round 8); #13-#14 are Generation v2 (Round 9,
+2026-08-30 — see [`docs/generation-v1-architecture.md`](./generation-v1-architecture.md)
+for the v2 architecture these entries reference).
+
 Source: [wayfinder map issue #36](https://github.com/hmcg-bs/media-ai-platform/issues/36).
-See its "Round 1" through "Round 6" entries for the full narrative; this file extracts
-just the reusable bug-catalog content in the same terse format as the extraction catalog.
+See its round-by-round entries for the full narrative; this file extracts just the
+reusable bug-catalog content in the same terse format as the extraction catalog.
 
 ---
 
@@ -154,7 +158,7 @@ exactly the kind of content Flux Fill is biased toward generating. The first ver
 the fill prompt only banned generating *text*, not a second product; it wasn't tested
 against this specific failure mode until it was observed live.
 
-**Fix (partial, not a full guarantee)**: Rewrote the fill prompt into three explicit
+**Fix, Round 6 (partial, prompt-only)**: Rewrote the fill prompt into three explicit
 numbered rules, the second of which states directly: *"there is already exactly one
 product in this image and it must remain the only one, never duplicated, echoed, or
 repeated anywhere in the background."* This measurably reduced the failure rate — three
@@ -164,16 +168,48 @@ final full end-to-end verification run (Round 6, `smoke_generated_ad_v11.png`) s
 produced a duplicate, garbled second bottle despite the strengthened prompt being live in
 that run.
 
-**Regression test**: `pipeline/tests/test_generation_background.py::TestGenerateBackgroundAndProduct::test_prompt_forbids_text_in_the_generated_scene`
-(checks the prompt text itself, not generation output — there is no practical way to
-regression-test a diffusion model's stochastic compliance with a negative instruction).
+**Fix, Round 9 / Generation v2 (structural, not just prompt-tuned)**: rather than only
+asking the model not to duplicate the product, the pipeline now **checks directly** and
+**repairs** what it finds — `duplicate_detection.py::detect_duplicate_product()`
+(deterministic-first: re-runs background-removal on the finished image, uses
+`scipy.ndimage.label` connected-component analysis to find blobs beyond the known
+product bbox, escalating to one vision call only when the deterministic signal is
+ambiguous) wired into `pipeline.py`'s regeneration loop with a capped
+(`MAX_SURGICAL_REPAIR_ATTEMPTS = 2`) surgical-repair sub-loop
+(`background.py::repair_duplicate_region()`). See `layout_planner.py` and
+`duplicate_detection.py`'s own module docstrings, and
+[`docs/generation-v1-architecture.md`](./generation-v1-architecture.md)'s step 7, for the
+full design.
 
-**Status**: open, documented rather than silently accepted. A genuinely deterministic fix
-would need either a second masking pass specifically excluding "product-shaped" regions
-of the fill, or a step-level orchestration/retry policy — exactly the kind of gap
-wayfinder map [#42](https://github.com/hmcg-bs/media-ai-platform/issues/42) exists to
-address (an observability layer would flag this pattern occurring at a measurable rate
-across many runs, informing whether it's worth further investment).
+**Confirmed live (Round 9, 2026-08-30)**:
+- **Detection works.** Run against the known-bad `smoke_generated_ad_v14.png` (a
+  duplicate bottle plus 3 hallucinated jars): the deterministic path correctly found the
+  situation ambiguous (multiple extra blobs) and escalated; the vision call correctly
+  identified and boxed the duplicate bottle (missed the 3 smaller jars — a real, if minor,
+  detection gap, not investigated further this round).
+- **A full end-to-end run produced ZERO duplicates** (`duplicate_detection_history`: 1
+  check run, 0 caught) and finished in a **single pass** (`passes_used=0`), versus v14's
+  baseline of 3/3 failed attempts — a genuinely different outcome, not just a smaller
+  failure rate on the same underlying problem.
+- **Repair itself is not a guarantee** — see bug #13 below, found live in this same
+  round: re-filling the flagged region can reintroduce a *different* duplicate/garbled
+  render in the same spot, because the underlying bias (Flux Fill wanting to render
+  another product-photo-shaped object into open, catalog-style canvas space) applies
+  just as much to a small targeted region as to the whole background. The capped-retry
+  design exists precisely because of this — the second detection pass in that same live
+  test correctly caught the newly-introduced duplicate too, and the outer loop's existing
+  full-regen fallback is the intended next step after repair attempts are exhausted, not
+  a hypothetical one.
+
+**Status**: **structurally mitigated, not eliminated.** Detection is now reliable
+(confirmed both on a known-bad case and via a clean live run); repair reduces blast
+radius and cost versus a full regeneration but inherits the same generative bias it's
+trying to fix, so it is one more capped attempt, not a guarantee — the full-regen
+fallback remains a real, necessary safety net, not a vestigial one.
+
+**Regression tests**: `pipeline/tests/test_generation_duplicate_detection.py` (all three
+paths: none/deterministic/vision-escalation), `pipeline/tests/test_generation_background.py::TestRepairDuplicateRegion`,
+`pipeline/tests/test_generation_pipeline.py::test_detected_duplicate_triggers_repair_before_compose`.
 
 ---
 
@@ -382,6 +418,79 @@ in that run is a real symptom of the cramped layout, not evidence the feathering
 working. This is an honest, unresolved interaction between two separate issues (#6 and
 this one) rather than a clean before/after win — flagged for the user rather than
 silently claimed as fully fixed.
+
+**Update, Round 9 / Generation v2**: the specific interaction described above — a
+duplicate product crowding the vision-based layout search into cramped corner zones —
+can no longer happen the same way, because layout is no longer searched per-attempt from
+whatever the current (possibly flawed) frame looks like; it's computed once,
+deterministically, from the product's real geometry (`layout_planner.py`), before
+generation runs, and stays fixed across retries. This doesn't make feathering itself any
+more or less correct than confirmed here — it removes the specific confound that made
+this round's live verification inconclusive.
+
+## 13. Surgical repair can reintroduce a new duplicate inside the erased region
+
+**Symptom**: live-tested `repair_duplicate_region()` (Round 9's targeted fix for bug #6)
+against the known-bad `smoke_generated_ad_v14.png`: the erase mask fully covered the
+flagged duplicate bottle (confirmed by direct visual inspection of the mask itself), but
+the repaired output showed a *different*, even more garbled duplicate bottle rendered
+into the same erased region — including nonsense brand text ("Stratimer") that hadn't
+been present before.
+
+**Root cause**: the erase-and-refill mechanism is still Flux Fill inpainting an isolated
+white region on an otherwise white/catalog-style canvas — the exact same generative bias
+documented in bug #6 (the model is trained heavily on product photography and is biased
+toward rendering "a labeled product" into open canvas space) applies just as much to a
+small targeted patch as to the whole background. Masking correctly *prevents* the
+model from touching pixels it shouldn't (the real product, per bug #5's fix); it does
+nothing to stop the model from painting something new and unwanted into the pixels it's
+explicitly asked to fill — which is precisely bug #6's own finding, now confirmed to
+apply to the repair path too, not just initial generation.
+
+**Fix**: none needed beyond what's already designed — this is exactly why
+`MAX_SURGICAL_REPAIR_ATTEMPTS` caps the sub-loop at 2 attempts before falling through to
+the pipeline's existing full-regeneration fallback, rather than treating one repair
+attempt as guaranteed to succeed. Confirmed live: re-running `detect_duplicate_product()`
+against the *repaired* (still-flawed) image correctly caught the new duplicate too (via
+the same vision-escalation path, since the deterministic path alone had already proven
+ambiguous on this image) — the self-correcting design works as intended even when a
+single repair attempt doesn't.
+
+**Regression test**: none practical for the stochastic generation outcome itself (same
+reasoning as bug #6's own regression-test note); `pipeline/tests/test_generation_pipeline.py::test_detected_duplicate_triggers_repair_before_compose`
+covers the deterministic *wiring* (a detected duplicate does trigger exactly one repair
+call before composing), not Flux Fill's compliance with the repair prompt.
+
+**Status**: open, by design — documented as a known, capped-retry-then-fallback
+limitation rather than a claimed fix. See bug #6's own "Status" note above for the
+combined picture.
+
+## 14. `validate_layout`'s zone-violation finding does not currently gate regeneration
+
+**Symptom**: not a defect exactly, but a real, live-confirmed gap worth documenting
+before it's mistaken for an oversight later. A Round 9 full end-to-end run returned
+`layout_validation_history: [{"zones_respected": false, "notes": "The bottle pouring
+liquid, the glass, and the small treats all extend into the defined zones. None of the
+zones are visually clear."}]` — yet the pipeline still stopped after this single pass
+(`passes_used=0`) and returned the result as final, because `zones_respected` is not one
+of the three values (`review.overall_pass`, `blend_review.blends_well`,
+`fidelity_review.overall_fidelity_pass`) that decide whether to regenerate.
+
+**Root cause / design context**: this was a deliberate scope decision in the approved
+Generation v2 plan — `validate_layout()` was specced as "a lighter version of
+`plan_layout`, confirms zones still clear, doesn't re-search" and recorded in history for
+observability, not added as a fourth gate. In this particular live run, the gap turned
+out to be harmless in practice: the compositor's background-band mechanism
+(`compositor.py`, see failure-mode catalog entries on legibility) renders text on a
+solid/semi-transparent surface regardless of what's behind it, so the scene bleeding into
+the reserved zone did not actually reduce legibility in the final composited ad (visually
+confirmed) — but this is not a structural guarantee for every case, only what one live
+run happened to show.
+
+**Status**: not a bug, but flagged as a candidate follow-up — whether `zones_respected`
+should join the regeneration gate (and if so, whether the background-band mechanism
+already makes that redundant in most cases) is an open question for a future round,
+not decided here.
 
 ## Round 6 live-verification findings
 

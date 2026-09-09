@@ -1,26 +1,25 @@
-"""Layout agent (Generation v1): fixes the collision bug found in the first
-live smoke test (wayfinder issue #36) -- the compositor previously used a
-static default layout with no idea where the product actually landed in the
-Flux-Kontext-produced frame, so headline/body text visibly overlapped the
-bottle. This agent looks at that *actual* image and reports where the
-product is and which regions are genuinely empty, so the compositor can
-reserve real space instead of guessing fixed fractions.
+"""Layout models (Generation v1/v2). Originally (v1) this module's own
+`plan_layout` was a Gemini vision call that looked at an *already-generated*
+frame and searched for empty space -- a fix for the collision bug found in
+the first live smoke test (wayfinder issue #36), where a static default
+layout had no idea where the product actually landed and text visibly
+overlapped it.
 
-A Gemini vision call (reuses GenAIClient.extract_structured -- no new client
-capability). Coordinates are normalized 0-1 fractions of the image, matching
-ElementSpec's own convention. Not blindly trusted as ground truth: this
-project's own established discipline (never treat an LLM's reported
-measurement as fact without a check -- see ADR-008's color_reported vs
-color_measured split) applies here too, so callers should treat these boxes
-as a strong prior, not an exact guarantee, and the compositor still clips
-text to stay within whatever box it's given."""
+Generation v2 (2026-08-30) replaces that search with layout_planner.py's
+deterministic `plan_layout_from_guide`: the product's bounding box is known
+immediately after background-removal, well before Flux Fill ever runs, so
+there's no need to wait for a generated image and guess. `plan_layout` is
+retired; what's left of the vision call is demoted to `validate_layout`
+below -- a cheaper check of whether a specific generated frame still
+respects the *already-decided* plan, not a fresh search. `BoundingBox` and
+`LayoutPlan` are unchanged and still the shared contract every other module
+in this package uses."""
 
 from __future__ import annotations
 
 from pydantic import BaseModel
 
 from pipeline.clients.genai_client import GenAIClient
-from pipeline.generation.guide import GenerationGuide
 
 
 class BoundingBox(BaseModel):
@@ -38,44 +37,55 @@ class LayoutPlan(BaseModel):
     price_offer_zone: BoundingBox | None = None
 
 
-def _headline_zone_hint(guide: GenerationGuide) -> str:
-    """Surfaces the guide's own headline_zone directive (e.g. "avoid middle")
-    as a hint the layout agent should weigh, not override -- avoiding the
-    product still comes first."""
-    for s in guide.visual_directives:
-        if s.dimension == "headline_zone" and s.value:
-            verdict = "prefer" if s.direction == "higher_is_better" else "avoid"
-            return (
-                f"Data suggests you should {verdict} placing the headline "
-                f"in the '{s.value}' zone."
-            )
-    return "No strong zone preference from the data -- prioritize avoiding the product."
+class LayoutValidation(BaseModel):
+    zones_respected: bool
+    notes: str
 
 
-def plan_layout(
+def _zone_lines(plan: LayoutPlan) -> str:
+    lines = [
+        f"- headline_zone: x={plan.headline_zone.x:.2f}, y={plan.headline_zone.y:.2f}, "
+        f"width={plan.headline_zone.width:.2f}, height={plan.headline_zone.height:.2f}",
+        f"- secondary_copy_zone: x={plan.secondary_copy_zone.x:.2f}, "
+        f"y={plan.secondary_copy_zone.y:.2f}, width={plan.secondary_copy_zone.width:.2f}, "
+        f"height={plan.secondary_copy_zone.height:.2f}",
+        f"- cta_zone: x={plan.cta_zone.x:.2f}, y={plan.cta_zone.y:.2f}, "
+        f"width={plan.cta_zone.width:.2f}, height={plan.cta_zone.height:.2f}",
+    ]
+    if plan.price_offer_zone is not None:
+        z = plan.price_offer_zone
+        lines.append(
+            f"- price_offer_zone: x={z.x:.2f}, y={z.y:.2f}, "
+            f"width={z.width:.2f}, height={z.height:.2f}"
+        )
+    return "\n".join(lines)
+
+
+def validate_layout(
     genai_client: GenAIClient,
     *,
     model: str,
     background_and_product_image: bytes,
-    guide: GenerationGuide,
-) -> LayoutPlan:
-    prompt = f"""This image shows a product on a background, with no text yet.
-Identify:
-1. product_bbox: the bounding box tightly around the visible product.
-2. headline_zone, secondary_copy_zone, cta_zone, price_offer_zone (price_offer_zone
-   only if there is a 5th genuinely separate empty area, else null): bounding
-   boxes for placing ad copy, each fully within the empty background -- none of
-   them may overlap product_bbox or each other.
+    layout_plan: LayoutPlan,
+) -> LayoutValidation:
+    """Confirms whether a plan already decided from the product's own
+    geometry (layout_planner.plan_layout_from_guide) still holds for this
+    specific generated frame -- not a fresh search. All coordinates are
+    fractions of the image (0.0-1.0), matching LayoutPlan's own convention."""
+    prompt = f"""This image shows a product on a generated background, with
+no text yet. A layout has already been decided ahead of time from the
+product's own geometry -- do not propose a different layout. Only confirm
+whether each zone below is still visually clear (no part of the product, or
+any other object, extends into it):
 
-All coordinates are fractions of the image (0.0-1.0), as x (left edge), y (top
-edge), width, height.
+{_zone_lines(layout_plan)}
 
-{_headline_zone_hint(guide)}
+All coordinates are fractions of the image (0.0-1.0).
 """
     return genai_client.extract_structured(
         model=model,
         prompt=prompt,
         image_bytes=background_and_product_image,
         image_mime_type="image/png",
-        schema=LayoutPlan,
+        schema=LayoutValidation,
     )

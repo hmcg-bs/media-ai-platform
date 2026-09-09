@@ -8,9 +8,15 @@ from __future__ import annotations
 
 import io
 
+import pytest
 from PIL import Image
 
-from pipeline.generation.masking import build_inpaint_mask
+from pipeline.generation.layout import BoundingBox
+from pipeline.generation.masking import (
+    build_inpaint_mask,
+    build_targeted_erase_mask,
+    compute_product_bbox,
+)
 
 
 def _rgba_with_center_square(size: int = 40, square: tuple[int, int] = (10, 30)) -> bytes:
@@ -89,4 +95,60 @@ class TestBuildInpaintMask:
         # somewhere between preserved and inpainted, not at either extreme.
         assert hard.getpixel((30, 20)) > 200
         edge_value = feathered.getpixel((30, 20))
+        assert 20 < edge_value < 235
+
+
+class TestComputeProductBbox:
+    def test_returns_normalized_bbox_around_the_foreground(self):
+        cutout = _rgba_with_center_square(size=40, square=(10, 30))
+        bbox = compute_product_bbox(cutout)
+
+        assert bbox.x == pytest.approx(10 / 40, abs=0.01)
+        assert bbox.y == pytest.approx(10 / 40, abs=0.01)
+        assert bbox.width == pytest.approx(20 / 40, abs=0.01)
+        assert bbox.height == pytest.approx(20 / 40, abs=0.01)
+
+    def test_raises_on_a_fully_transparent_cutout(self):
+        img = Image.new("RGBA", (20, 20), (0, 0, 0, 0))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+
+        with pytest.raises(ValueError):
+            compute_product_bbox(buf.getvalue())
+
+
+class TestBuildTargetedEraseMask:
+    def test_region_is_white_everything_else_is_black(self):
+        region = BoundingBox(x=0.25, y=0.25, width=0.5, height=0.5)
+        mask_bytes = build_targeted_erase_mask(40, 40, region, dilate_px=0, feather_radius=0)
+        mask = Image.open(io.BytesIO(mask_bytes))
+
+        assert mask.mode == "L"
+        assert mask.size == (40, 40)
+        assert mask.getpixel((20, 20)) > 200  # center of the region -> erase
+        assert mask.getpixel((2, 2)) < 50  # far corner -> preserve
+
+    def test_dilation_grows_the_erased_region_outward(self):
+        region = BoundingBox(x=0.25, y=0.25, width=0.5, height=0.5)
+        no_dilate = Image.open(
+            io.BytesIO(build_targeted_erase_mask(40, 40, region, dilate_px=0, feather_radius=0))
+        )
+        dilated = Image.open(
+            io.BytesIO(build_targeted_erase_mask(40, 40, region, dilate_px=12, feather_radius=0))
+        )
+
+        assert no_dilate.getpixel((8, 20)) < 50
+        assert dilated.getpixel((8, 20)) > 200
+
+    def test_feathering_softens_the_boundary(self):
+        region = BoundingBox(x=0.25, y=0.25, width=0.5, height=0.5)
+        hard = Image.open(
+            io.BytesIO(build_targeted_erase_mask(40, 40, region, dilate_px=0, feather_radius=0))
+        )
+        feathered = Image.open(
+            io.BytesIO(build_targeted_erase_mask(40, 40, region, dilate_px=0, feather_radius=3))
+        )
+
+        assert hard.getpixel((9, 20)) < 50  # just outside the region -> preserved
+        edge_value = feathered.getpixel((9, 20))
         assert 20 < edge_value < 235

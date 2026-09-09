@@ -39,13 +39,30 @@ comparison role (feature_fidelity.py) instead of a generation-input one.
 `_scene_description`'s own logic here is unaffected by that move (it already
 just consumes whatever StyleBrief it's given), but the docstring above is
 corrected so it doesn't misstate where the StyleBrief's content comes from.
+
+Generation v2 (2026-08-30) adds two things. First, `keep_clear_zones`: since
+layout_planner.py now decides where copy will go BEFORE this call runs, the
+generation prompt can be told to keep those exact regions visually simple,
+instead of the compositor discovering after the fact (Generation v1's
+plan_layout) that busy imagery landed where text needed to go. Second,
+`repair_duplicate_region`: a surgical fix for a detected duplicate-product
+hallucination (duplicate_detection.py) that re-runs Flux Fill against only
+the hallucinated region of the CURRENT image, instead of a full from-scratch
+regeneration -- confirmed live that a full regen which fixed one problem
+(blend quality) could reintroduce a different one (a duplicate product) on a
+later attempt, so a smaller, targeted edit is preferred first.
 """
 
 from __future__ import annotations
 
+import io
+
+from PIL import Image
+
 from pipeline.clients.replicate_client import BackgroundRemoverClient, FluxFillClient
 from pipeline.generation.guide import GenerationGuide
-from pipeline.generation.masking import build_inpaint_mask
+from pipeline.generation.layout import BoundingBox
+from pipeline.generation.masking import build_inpaint_mask, build_targeted_erase_mask
 from pipeline.generation.style_reference import StyleBrief
 
 _SCENE_DIMENSIONS = {"background_style", "dominant_color", "contrast_ratio_type"}
@@ -133,6 +150,44 @@ def _guide_to_scene_description(guide: GenerationGuide) -> str:
     return "; ".join(parts)
 
 
+def _zone_region_label(zone: BoundingBox) -> str:
+    """Buckets a fractional bounding box into a coarse verbal region --
+    a text-conditioned diffusion model follows "the upper-right area"
+    far more reliably than raw coordinates injected as prose."""
+    center_x = zone.x + zone.width / 2
+    center_y = zone.y + zone.height / 2
+    horizontal = "left" if center_x < 0.4 else "right" if center_x > 0.6 else "center"
+    vertical = "upper" if center_y < 0.4 else "lower" if center_y > 0.6 else "middle"
+    if horizontal == "center" and vertical == "middle":
+        return "center"
+    if horizontal == "center":
+        return f"{vertical} area"
+    if vertical == "middle":
+        return f"{horizontal} area"
+    return f"{vertical}-{horizontal} area"
+
+
+def _keep_clear_instruction(zones: list[BoundingBox]) -> str:
+    """Generation v2: layout_planner.py already knows where copy will go
+    before this call runs -- telling Flux Fill to keep those regions simple
+    up front is cheaper and more reliable than discovering after the fact
+    that busy imagery landed exactly where text needed to be placed."""
+    descriptions = []
+    for zone in zones:
+        label = _zone_region_label(zone)
+        x0, y0 = round(zone.x * 100), round(zone.y * 100)
+        x1, y1 = round((zone.x + zone.width) * 100), round((zone.y + zone.height) * 100)
+        descriptions.append(
+            f"the {label} (roughly {x0}-{x1}% from the left, {y0}-{y1}% from the top)"
+        )
+    joined = "; and ".join(descriptions)
+    return (
+        f"Keep these specific regions visually simple and free of any busy "
+        f"detail or objects, since ad copy text will be placed there "
+        f"afterward: {joined}."
+    )
+
+
 def _scene_description(guide: GenerationGuide, style_brief: StyleBrief | None) -> str:
     """A StyleBrief (style_reference.py) is the guide's own directives already
     translated into concrete creative language -- prefer it outright over the
@@ -152,15 +207,52 @@ def generate_background_and_product(
     intention: str,
     guide: GenerationGuide,
     style_brief: StyleBrief | None = None,
+    cutout: bytes | None = None,
+    keep_clear_zones: list[BoundingBox] | None = None,
 ) -> bytes:
+    """`cutout`: pass the already-computed RGBA cutout (e.g. from
+    pipeline.py's product_bbox step) to avoid paying for a second
+    background-removal call on the same photo; computed fresh if omitted.
+    `keep_clear_zones`: layout_planner.py's pre-decided copy zones, folded
+    into the prompt as explicit guardrails (Generation v2)."""
     scene = _scene_description(guide, style_brief)
-    cutout = bg_remover_client.remove_background(product_photo_bytes)
+    if cutout is None:
+        cutout = bg_remover_client.remove_background(product_photo_bytes)
     mask = build_inpaint_mask(cutout)
+    keep_clear = f" {_keep_clear_instruction(keep_clear_zones)}" if keep_clear_zones else ""
     prompt = (
-        f"{_NO_TEXT_INSTRUCTION} "
+        f"{_NO_TEXT_INSTRUCTION}{keep_clear} "
         f"Fill in a new background and surrounding scene to achieve: {scene}. "
         f"Mood and setting only, for visual tone -- these words describe the "
         f"intended feeling, they are not a caption or tagline and must never "
         f"be rendered as text in the image: {intention}."
     )
     return flux_fill_client.inpaint(product_photo_bytes, mask, prompt)
+
+
+def repair_duplicate_region(
+    flux_fill_client: FluxFillClient,
+    current_image_bytes: bytes,
+    duplicate_bbox: BoundingBox,
+    guide: GenerationGuide,
+    style_brief: StyleBrief | None = None,
+) -> bytes:
+    """Surgical repair for a detected duplicate-product hallucination
+    (duplicate_detection.py): re-runs Flux Fill against the CURRENT (flawed)
+    image with a mask that exposes only the duplicate's own region, rather
+    than a full from-scratch regeneration -- confirmed live that a full
+    regen which fixed one problem (blend quality) could reintroduce a
+    different one (a duplicate product) on a later attempt. Reuses the same
+    scene description generation already uses, so the erased patch is
+    re-filled to match the same intended background, not a generic one."""
+    scene = _scene_description(guide, style_brief)
+    canvas = Image.open(io.BytesIO(current_image_bytes))
+    mask = build_targeted_erase_mask(canvas.width, canvas.height, duplicate_bbox)
+    prompt = (
+        f"Erase everything in the white region of the mask and seamlessly "
+        f"continue the surrounding scene: {scene}. Absolutely no products, "
+        f"text, logos, or additional objects of any kind in the erased "
+        f"region -- background/environment fill only, blended to match the "
+        f"rest of the image."
+    )
+    return flux_fill_client.inpaint(current_image_bytes, mask, prompt)

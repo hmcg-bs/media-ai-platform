@@ -12,8 +12,10 @@ from pipeline.generation.background import (
     _guide_to_scene_description,
     _scene_description,
     generate_background_and_product,
+    repair_duplicate_region,
 )
 from pipeline.generation.guide import DirectionalSignal, GenerationGuide
+from pipeline.generation.layout import BoundingBox
 from pipeline.generation.style_reference import StyleBrief
 
 
@@ -171,6 +173,77 @@ class TestGenerateBackgroundAndProduct:
 
         prompt = flux_fill.calls[0][2]
         assert prompt.index("zero text of any kind") < prompt.index("Fill in a new background")
+
+
+class TestKeepClearZones:
+    """Generation v2: layout_planner.py decides copy zones before this call
+    runs -- they must be folded into the prompt as explicit guardrails."""
+
+    def test_keep_clear_zones_produce_a_region_description_in_the_prompt(self):
+        bg_remover = _FakeBgRemoverClient(_rgba_cutout_bytes())
+        flux_fill = _FakeFluxFillClient(b"final-image-bytes")
+        zones = [BoundingBox(x=0.6, y=0.05, width=0.35, height=0.2)]
+
+        generate_background_and_product(
+            bg_remover, flux_fill, b"photo",
+            intention="test", guide=_guide_with(), keep_clear_zones=zones,
+        )
+
+        prompt = flux_fill.calls[0][2].lower()
+        assert "keep these specific regions visually simple" in prompt
+        assert "upper-right" in prompt
+
+    def test_no_keep_clear_instruction_when_zones_omitted(self):
+        bg_remover = _FakeBgRemoverClient(_rgba_cutout_bytes())
+        flux_fill = _FakeFluxFillClient(b"final-image-bytes")
+
+        generate_background_and_product(
+            bg_remover, flux_fill, b"photo", intention="test", guide=_guide_with(),
+        )
+
+        prompt = flux_fill.calls[0][2].lower()
+        assert "keep these specific regions" not in prompt
+
+    def test_pre_fetched_cutout_skips_a_second_background_removal_call(self):
+        bg_remover = _FakeBgRemoverClient(_rgba_cutout_bytes())
+        flux_fill = _FakeFluxFillClient(b"final-image-bytes")
+
+        generate_background_and_product(
+            bg_remover, flux_fill, b"photo", intention="test", guide=_guide_with(),
+            cutout=_rgba_cutout_bytes(),
+        )
+
+        assert bg_remover.calls == []
+
+
+class TestRepairDuplicateRegion:
+    """Generation v2: surgical repair for a detected duplicate-product
+    hallucination -- re-runs Flux Fill against the CURRENT image with a mask
+    that exposes only the duplicate's own region."""
+
+    def test_inpaints_current_image_with_a_targeted_mask(self):
+        import io
+
+        from PIL import Image
+
+        img = Image.new("RGB", (100, 100), "white")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        current_image = buf.getvalue()
+
+        flux_fill = _FakeFluxFillClient(b"repaired-image-bytes")
+        duplicate_bbox = BoundingBox(x=0.6, y=0.6, width=0.3, height=0.3)
+
+        result = repair_duplicate_region(
+            flux_fill, current_image, duplicate_bbox, _guide_with(),
+        )
+
+        assert result == b"repaired-image-bytes"
+        called_image, called_mask, called_prompt = flux_fill.calls[0]
+        assert called_image == current_image
+        assert isinstance(called_mask, bytes) and len(called_mask) > 0
+        assert "erase" in called_prompt.lower()
+        assert "no products" in called_prompt.lower()
 
 
 class TestSceneDescription:

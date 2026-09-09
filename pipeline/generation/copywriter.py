@@ -38,11 +38,16 @@ def draft_copy(
     intention: str,
     product_name: str,
     guide: GenerationGuide,
+    variant_hint: str | None = None,
 ) -> AdCopy:
     """One structured text call. `guide`'s directives are descriptive
     ("cta_type=order tends to correlate with higher_is_better") not
     prescriptive commands -- the prompt says so explicitly so the model
-    doesn't over-fit to a single historical correlation."""
+    doesn't over-fit to a single historical correlation. `variant_hint`
+    (Generation v2's multi-variant orchestrator): asks for genuinely
+    different phrasing/hook angle from a batch's other variants, without
+    relaxing any directive above."""
+    variant_line = f"\n{variant_hint} Still honor every directive above.\n" if variant_hint else ""
     prompt = f"""You are writing ad copy for a supplement product ad.
 
 Product: {product_name}
@@ -54,7 +59,7 @@ signals from past ads, not hard rules -- use them as informed guidance, not
 literal instructions:
 
 {_guide_directives_as_prompt_lines(guide)}
-
+{variant_line}
 Write:
 - headline: a short, punchy primary hook (under 60 characters)
 - secondary_copy: 1-2 supporting sentences (benefit/claim/ingredient focus)
