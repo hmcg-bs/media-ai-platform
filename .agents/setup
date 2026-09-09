@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+step() {
+  printf '\n==> %s\n' "$1"
+}
+
+step "Ensuring uv is available"
+if ! command -v uv >/dev/null 2>&1; then
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+uv --version
+
+step "Installing Python 3.12 and locked project dependencies"
+time uv sync --frozen --extra dev
+
+step "Verifying the project environment"
+uv run --frozen python -c 'import cv2, google.genai, numpy, pandas; print("Python dependencies ready")'

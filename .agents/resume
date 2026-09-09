@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Dependencies are restored from the orb snapshot. Cloud-backed commands use
+# credentials supplied through the orb environment; authentication is never
+# performed interactively during setup or resume.
+printf 'Orb environment resumed; use uv run for Python commands.\n'
