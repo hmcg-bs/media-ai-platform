@@ -1,6 +1,6 @@
 # Meta Ads learning and image generation: joint evidence plan
 
-**Status:** Proposed; planning only  
+**Status:** Partially implemented on the Meta feature branch; human-dependent gates remain blocked
 **Date:** 2026-09-12  
 **Scope:** Supplements static-image ads  
 **Decision authority:** No branch may be pushed or merged into `master` without explicit owner
@@ -465,3 +465,42 @@ make a rollback appear successful. Promote manifests and aliases; do not mutate 
 Until those dependencies are satisfied, the evidence-backed default is v3's exact 4+4 guide,
 no Cox/trend/category directions, OCR cleanup off, no six-dimension pass, and no claim that current
 generated imagery is publication-ready.
+
+## Meta implementation status (2026-09-12)
+
+The Meta branch now implements the unblocked P0–P2 workflow without changing v3 evidence:
+
+- `pipeline.validation.taxonomy_adjudication` creates a blank, versioned review artifact and enforces
+  the fixed M1 policy (all rows labelled, at least 20% independent double-review, binary κ ≥ 0.80,
+  and independent adjudication with rationale for every binary or subcategory disagreement). The
+  passing report cryptographically binds the exact approved-label content. Reviewers cannot lower
+  policy thresholds in the artifact. No labels have been supplied by code.
+- `pipeline.supplements_workflow` requires the passing adjudication report and matching approved
+  labels. Training reports independently reject ads without one coherent human-adjudication sample
+  provenance. Adjudicated subcategory takes precedence over keyword/landing-page heuristics.
+- training now reports deterministic paired bootstrap intervals for MAE improvement, calibration
+  gap, and fixed top-20% precision; raw-feature PSI/total-variation drift; advertiser counts and
+  conservative segment support; and an objective promotion decision. Drift remains descriptive.
+- `pipeline.model_training.observation_windows` freezes byte-bound baseline/future windows and
+  requires a later chained window with new ad IDs. `evaluate_future_window` reconstructs the frozen
+  no-embedding specification on old training rows only, rejects stale proxy targets, requires at
+  least 30 days represented by each active ad's immutable snapshot (explicit inactive outcomes are
+  complete), checks taxonomy and advertiser isolation before fitting, and never tunes on the future
+  rows. Waiting after a stale snapshot does not make its target mature.
+- `pipeline.model_training.handoff_bundle` freezes the three exact accepted v3 files by their known
+  SHA-256 values into an atomic immutable bundle, independently re-derives directives, and verifies
+  all files before transfer. A new version requires `promotion_decision.status=promoted`; it never
+  overwrites v3. Generation must add explicit bundle discovery before any v4 bundle can be selected.
+- Every report/bundle restates loop isolation: generated outputs are prohibited as Meta performance
+  labels. Failed Generation candidates remain quarantined by the Generation owner and have no path
+  into this taxonomy-gated training workflow.
+
+Reproducible local artifacts are under `.amp/in/artifacts/`: the blank
+`supplements_taxonomy_review_v1.json`, frozen
+`supplements_observation_window_baseline_v1.json`, and
+`handoffs/supplements-v3-bundle-v2/manifest.json`. Bundle v2 corrects only the survival role's
+consumer-compatible relative filename; its evidence bytes and hashes are unchanged. The first
+manifest remains immutable. These are workflow evidence, not completed human review or new model
+evidence. M1 is blocked on human labels; future-window evaluation is blocked on a genuinely
+later scrape with mature targets; survival remains blocked on sufficient observed endings; and B0
+remains blocked on rights and craft approval.

@@ -38,10 +38,23 @@ def test_segment_metrics_gates_small_subcategories() -> None:
     assert result["subcategories"]["vitamins"]["status"] == "insufficient_sample"
 
 
+def test_segment_promotion_needs_rows_and_advertiser_diversity() -> None:
+    rows = [
+        {"ad_id": str(i), "page_id": f"brand-{i // 5}", "product_subcategory": "protein"}
+        for i in range(100)
+    ]
+    actual = np.linspace(0, 1, 100)
+    result = segment_metrics(rows, actual, actual.copy(), {}, minimum_size=10)
+    segment = result["subcategories"]["protein"]
+
+    assert segment["n"] == 100
+    assert segment["n_advertisers"] == 20
+    assert segment["promotion_supported"] is True
+
+
 def test_longevity_threshold_stays_null_when_all_ads_are_censored() -> None:
     rows = [
-        {"ad_id": str(i), "days_active": i + 10, "search_queries": ["creatine"]}
-        for i in range(20)
+        {"ad_id": str(i), "days_active": i + 10, "search_queries": ["creatine"]} for i in range(20)
     ]
     ads = [{"ad_archive_id": str(i), "end_date": None} for i in range(20)]
     report = longevity_benchmarks(rows, ads, scrape_dates=set(), minimum_size=20)

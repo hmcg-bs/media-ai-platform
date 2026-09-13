@@ -23,6 +23,10 @@ import xgboost as xgb
 from sklearn.model_selection import GroupShuffleSplit, train_test_split
 
 from pipeline.model_training.evaluation import segment_metrics, temporal_advertiser_split
+from pipeline.model_training.model_evidence import (
+    bootstrap_prediction_evidence,
+    feature_drift_report,
+)
 from pipeline.model_training.preprocessing import (
     _EMBEDDING_COLUMNS,
     _ID_COLUMNS,
@@ -50,6 +54,7 @@ class SuccessScoreCalibrator:
 
     def __init__(self, rows: list[dict[str, Any]]):
         frame = pd.DataFrame(rows)
+
         def values(name: str, default: float) -> pd.Series:
             source = frame[name] if name in frame else pd.Series(default, index=frame.index)
             return pd.to_numeric(source, errors="coerce").fillna(default)
@@ -70,6 +75,7 @@ class SuccessScoreCalibrator:
         if not rows:
             return []
         df = pd.DataFrame(rows)
+
         def values(name: str, default: float) -> pd.Series:
             source = df[name] if name in df else pd.Series(default, index=df.index)
             return pd.to_numeric(source, errors="coerce").fillna(default)
@@ -112,11 +118,7 @@ def build_xy_composite(
     df = pd.DataFrame(rows)
     y = df["composite_success_score"].astype(float)
 
-    drop_cols = (
-        list(_ID_COLUMNS)
-        + list(TARGET_COLUMNS)
-        + ["composite_success_score", "price_tier"]
-    )
+    drop_cols = list(_ID_COLUMNS) + list(TARGET_COLUMNS) + ["composite_success_score", "price_tier"]
     X = df.drop(columns=[c for c in drop_cols if c in df.columns])
     X["price_tier"] = df["price_tier"]
 
@@ -166,9 +168,7 @@ def train_and_explain(
     X_test, y_test = build_xy_composite(scored_test, include_embeddings=include_embeddings)
 
     train_ids = {r.get("ad_id") for r in train_rows}
-    inner_dates = {
-        k: v for k, v in (start_dates or {}).items() if k in train_ids
-    }
+    inner_dates = {k: v for k, v in (start_dates or {}).items() if k in train_ids}
     if inner_dates:
         tune_train_rows, validation_rows, _ = temporal_advertiser_split(train_rows, inner_dates)
     else:
@@ -188,8 +188,11 @@ def train_and_explain(
         train_t = prep.fit_transform(X_tune)
         validation_t = prep.transform(X_validation)
         candidate = xgb.XGBRegressor(
-            **params, subsample=0.8, colsample_bytree=0.8,
-            random_state=random_state, n_jobs=n_jobs,
+            **params,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            random_state=random_state,
+            n_jobs=n_jobs,
         )
         candidate.fit(train_t, y_tune)
         val_mae = float(np.mean(np.abs(y_validation.to_numpy() - candidate.predict(validation_t))))
@@ -218,6 +221,7 @@ def train_and_explain(
     r2 = float(1 - ss_res / ss_tot) if ss_tot > 0 else float("nan")
     mae = float(np.mean(np.abs(y_test_arr - test_pred)))
     baseline_mae = float(np.mean(np.abs(y_test_arr - np.median(y_train))))
+    baseline_prediction = float(np.median(y_train))
     k = max(1, int(np.ceil(len(y_test_arr) * 0.2)))
     actual_top = set(np.argsort(y_test_arr)[-k:])
     predicted_top = set(np.argsort(test_pred)[-k:])
@@ -232,9 +236,7 @@ def train_and_explain(
     mean_abs_shap = np.abs(shap_values).mean(axis=0)
     mean_signed_shap = shap_values.mean(axis=0)
 
-    ranking = sorted(
-        zip(feature_names, mean_abs_shap, mean_signed_shap), key=lambda t: -t[1]
-    )
+    ranking = sorted(zip(feature_names, mean_abs_shap, mean_signed_shap), key=lambda t: -t[1])
 
     train_groups = {str(r.get("page_id") or f"__ad__{r['ad_id']}") for r in train_rows}
     test_groups = {str(r.get("page_id") or f"__ad__{r['ad_id']}") for r in test_rows}
@@ -248,8 +250,17 @@ def train_and_explain(
         "baseline_mae": round(baseline_mae, 4),
         "mae_improvement_over_baseline": round(baseline_mae - mae, 4),
         "top_20pct_precision": round(top_precision, 4),
+        "uncertainty": bootstrap_prediction_evidence(
+            y_test_arr,
+            test_pred,
+            baseline_prediction,
+            random_state=random_state,
+        ),
+        "feature_drift": feature_drift_report(train_rows, test_rows),
         "split_strategy": split_strategy,
         "advertiser_overlap": len(train_groups & test_groups),
+        "n_train_advertisers": len(train_groups),
+        "n_test_advertisers": len(test_groups),
         "best_parameters": best_params,
         "tuning_results": tuning_results,
         "label_calibration": "training_only_empirical_percentiles",
@@ -267,6 +278,73 @@ def train_and_explain(
             }
             for name, a, s in ranking[:top_n]
         ],
+    }
+
+
+def fit_and_score_future_window(
+    training_rows: list[dict[str, Any]],
+    future_rows: list[dict[str, Any]],
+    best_parameters: dict[str, Any],
+    random_state: int = 42,
+    n_jobs: int = 1,
+    future_start_dates: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Refit a frozen specification on old rows and score only future rows.
+
+    Parameter selection is not repeated here. The future window cannot affect
+    percentile calibration, preprocessing, model fitting, or feature pooling.
+    """
+    if not training_rows or not future_rows:
+        raise ValueError("training and future rows must both be non-empty")
+    calibrator = SuccessScoreCalibrator(training_rows)
+    scored_train = calibrator.transform(training_rows)
+    scored_future = calibrator.transform(future_rows)
+    X_train, y_train = build_xy_composite(scored_train, include_embeddings=False)
+    X_future, y_future = build_xy_composite(scored_future, include_embeddings=False)
+    X_future = X_future.reindex(columns=X_train.columns)
+    preprocessor = build_preprocessor(X_train)
+    X_train_t = preprocessor.fit_transform(X_train)
+    X_future_t = preprocessor.transform(X_future)
+    model = xgb.XGBRegressor(
+        **best_parameters,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=random_state,
+        n_jobs=n_jobs,
+    )
+    model.fit(X_train_t, y_train)
+    actual = y_future.to_numpy()
+    predicted = model.predict(X_future_t)
+    baseline_prediction = float(np.median(y_train))
+    uncertainty = bootstrap_prediction_evidence(
+        actual,
+        predicted,
+        baseline_prediction,
+        random_state=random_state,
+    )
+    train_groups = {str(row.get("page_id") or f"__ad__{row.get('ad_id')}") for row in training_rows}
+    future_groups = {str(row.get("page_id") or f"__ad__{row.get('ad_id')}") for row in future_rows}
+    return {
+        "n_train": len(training_rows),
+        "n_test": len(future_rows),
+        "test_mae": round(float(np.mean(np.abs(actual - predicted))), 4),
+        "baseline_mae": round(float(np.mean(np.abs(actual - baseline_prediction))), 4),
+        "top_20pct_precision": uncertainty["top_20pct_precision"],
+        "advertiser_overlap": len(train_groups & future_groups),
+        "n_train_advertisers": len(train_groups),
+        "n_test_advertisers": len(future_groups),
+        "uncertainty": uncertainty,
+        "feature_drift": feature_drift_report(training_rows, future_rows),
+        "segment_evaluation": segment_metrics(
+            future_rows,
+            actual,
+            predicted,
+            future_start_dates or {},
+            minimum_size=10,
+        ),
+        "best_parameters": best_parameters,
+        "random_state": random_state,
+        "fit_policy": "frozen_parameters_old_training_rows_only",
     }
 
 

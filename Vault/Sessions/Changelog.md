@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 30/60/90/180-day Kaplan–Meier validation with explicit evidence gates
 - Fail-closed manual Supplements taxonomy and quality-reference approval workflows
 - Content-addressed max-1600 WebP archive storage and immutable manifests
+- Versioned Supplements taxonomy double-review/adjudication workflow with fixed agreement gates
+- Paired-bootstrap model uncertainty, raw-feature drift, and objective promotion decisions
+- Immutable collection windows and old-model-first future-window evaluation
+- Atomic, hash-verified Meta-to-Generation handoff bundles with an exact v3 freeze
 
 ### Changed
 - Aligned the competitor-ad Performance proxy to Longevity weighted by page-level Scaling with a Meta collation Variant boost
@@ -42,6 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   complete seeded 600-ad Supplements sample
 - Model reports now embed schema, implementation hash, and clean Git provenance
 - Successful-ad references are capped at eight and restricted to six-dimension craft comparison
+- Supplements training now fails closed before fitting unless every input ad carries one coherent,
+  content-bound human taxonomy provenance version
+- Adjudicated product subcategory now takes precedence over keyword and landing-page heuristics
 
 ### Fixed
 - Prevented same-advertiser train/test leakage and same-output concurrent job corruption
@@ -55,6 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Longevity event; sparse-event Cox fitting now fails closed
 - Sized BigQuery streaming batches by bytes and supported bucket-scoped Object Admin without
   requiring bucket metadata access
+- Prevented mutable review thresholds, tampered temporal-window eligibility, stale future proxy
+  targets, and elapsed wall time from creating false taxonomy/trend evidence
 
 ### Removed
 - Target-derived cluster trend features from the default training CLI because their in-sample encoding leaked outcomes

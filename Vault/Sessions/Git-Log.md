@@ -23,3 +23,7 @@ Detailed commit history with dates, branches, and descriptions.
 | 2026-09-12 | auto/meta-ads-model-pipeline | 9879783 | Document durable Supplements learning workflow |
 | 2026-09-12 | auto/meta-ads-model-pipeline | 6f40f12 | Correct live warehouse and longevity semantics |
 | 2026-09-12 | auto/meta-ads-model-pipeline | 4448d0b | Plan joint Meta and generation improvements |
+| 2026-09-12 | auto/meta-ads-model-pipeline | 22196a4 | Gate Supplements training on adjudicated taxonomy |
+| 2026-09-12 | auto/meta-ads-model-pipeline | cf967c5 | Add temporal evidence and immutable handoff gates |
+| 2026-09-12 | auto/meta-ads-model-pipeline | f07b636 | Document evidence-gated Meta workflow |
+| 2026-09-12 | auto/meta-ads-model-pipeline | 998a356 | Align v3 bundle paths with generation consumer |

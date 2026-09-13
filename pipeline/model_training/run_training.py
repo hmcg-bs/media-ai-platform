@@ -17,6 +17,7 @@ from typing import Any
 from pipeline.artifacts import atomic_write_json, exclusive_output
 from pipeline.model_training.data_quality import build_quality_report, print_quality_report
 from pipeline.model_training.evaluation import longevity_benchmarks, temporal_advertiser_split
+from pipeline.model_training.model_evidence import build_promotion_decision
 from pipeline.model_training.preprocessing import (
     build_preprocessor,
     build_xy,
@@ -87,6 +88,50 @@ def _git_provenance() -> dict[str, Any]:
     return {"git_commit": commit, "git_branch": branch, "git_worktree_dirty": dirty}
 
 
+def _taxonomy_gate(ads: list[dict[str, Any]]) -> dict[str, Any]:
+    """Verify every training ad came through the human adjudication boundary."""
+    sample_hashes = set()
+    label_hashes = set()
+    failures = []
+    for ad in ads:
+        label = ad.get("taxonomy_label") or {}
+        provenance = label.get("provenance") or {}
+        ad_id = str(ad.get("ad_archive_id") or "")
+        if label.get("source") != "human_adjudication" or label.get("is_supplement") is not True:
+            failures.append(f"ad {ad_id or '<missing>'} lacks an approved human taxonomy label")
+        sample_hash = provenance.get("sample_sha256")
+        if not sample_hash or len(str(sample_hash)) != 64:
+            failures.append(f"ad {ad_id or '<missing>'} lacks taxonomy sample provenance")
+        else:
+            sample_hashes.add(str(sample_hash))
+        if (
+            provenance.get("review_schema_version") != "supplements-taxonomy-review-v1"
+            or provenance.get("adjudication_report_schema_version")
+            != "supplements-taxonomy-adjudication-report-v1"
+            or not provenance.get("reviewer_id")
+            or not provenance.get("reviewed_at")
+        ):
+            failures.append(f"ad {ad_id or '<missing>'} has incomplete reviewer provenance")
+        label_hash = provenance.get("approved_labels_content_sha256")
+        if not label_hash or len(str(label_hash)) != 64:
+            failures.append(f"ad {ad_id or '<missing>'} lacks approved-label content provenance")
+        else:
+            label_hashes.add(str(label_hash))
+    if len(sample_hashes) > 1:
+        failures.append("training ads combine multiple taxonomy sample versions")
+    if len(label_hashes) > 1:
+        failures.append("training ads combine multiple approved taxonomy label versions")
+    return {
+        "status": "passed" if ads and not failures else "failed",
+        "n_training_ads": len(ads),
+        "sample_sha256": next(iter(sample_hashes), None) if len(sample_hashes) == 1 else None,
+        "approved_labels_content_sha256": (
+            next(iter(label_hashes), None) if len(label_hashes) == 1 else None
+        ),
+        "failures": failures[:100],
+    }
+
+
 def run(
     matrix_file: Path = DEFAULT_MATRIX_FILE,
     ads_file: Path = DEFAULT_ADS_FILE,
@@ -96,6 +141,12 @@ def run(
 ) -> dict[str, Any]:
     rows = json.loads(matrix_file.read_text())
     ads = json.loads(ads_file.read_text())
+    taxonomy_gate = _taxonomy_gate(ads)
+    if taxonomy_gate["status"] != "passed":
+        raise ValueError(
+            "training ads did not pass the human taxonomy gate: "
+            + "; ".join(taxonomy_gate["failures"][:5])
+        )
 
     quality_report = build_quality_report(rows)
     print_quality_report(quality_report)
@@ -164,9 +215,7 @@ def run(
         }
     else:
         cox_model = fit_cox_model(X_train_df, duration_train, event_train)
-        survival_results = evaluate_cox_model(
-            cox_model, X_test_df, duration_test, event_test
-        )
+        survival_results = evaluate_cox_model(cox_model, X_test_df, duration_test, event_test)
     survival_results["n_train"] = len(X_train_df)
     survival_results["n_events_observed_train"] = train_events
     print("\n=== days_active (Cox Proportional Hazards, censored) ===")
@@ -205,22 +254,31 @@ def run(
             print_results(target, label, results)
             model_results[target][label] = results
 
+    run_manifest = {
+        "matrix_file": str(matrix_file),
+        "matrix_sha256": _sha256(matrix_file),
+        "ads_file": str(ads_file),
+        "ads_sha256": _sha256(ads_file),
+        "random_state": random_state,
+        "workers_per_model": n_jobs,
+        "embeddings_available": has_embeddings,
+        "implementation_sha256": _implementation_sha256(),
+        "longevity_event_semantics": (
+            "is_active=false; legacy end_date heuristic only when activity status is absent"
+        ),
+        **_git_provenance(),
+    }
+    without_embeddings = model_results["composite_success_score"]["without_embeddings"]
+    promotion_decision = build_promotion_decision(
+        without_embeddings,
+        run_manifest,
+        taxonomy_gate,
+    )
     report = {
         "report_schema_version": REPORT_SCHEMA_VERSION,
-        "run_manifest": {
-            "matrix_file": str(matrix_file),
-            "matrix_sha256": _sha256(matrix_file),
-            "ads_file": str(ads_file),
-            "ads_sha256": _sha256(ads_file),
-            "random_state": random_state,
-            "workers_per_model": n_jobs,
-            "embeddings_available": has_embeddings,
-            "implementation_sha256": _implementation_sha256(),
-            "longevity_event_semantics": (
-                "is_active=false; legacy end_date heuristic only when activity status is absent"
-            ),
-            **_git_provenance(),
-        },
+        "run_manifest": run_manifest,
+        "taxonomy_gate": taxonomy_gate,
+        "promotion_decision": promotion_decision,
         "quality_report": {
             "columns": quality_report["columns"],
             "flagged_columns": [p["column"] for p in quality_report["flagged"]],

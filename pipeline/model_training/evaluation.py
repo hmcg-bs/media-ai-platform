@@ -39,13 +39,17 @@ def temporal_advertiser_split(
     train = [r for r in dated if str(r.get("page_id") or f"__ad__{r['ad_id']}") not in test_groups]
     test = [r for r in dated if str(r.get("page_id") or f"__ad__{r['ad_id']}") in test_groups]
     train_groups = {str(r.get("page_id") or f"__ad__{r['ad_id']}") for r in train}
-    return train, test, {
-        "strategy": "newest_first_seen_advertiser_holdout",
-        "advertiser_overlap": len(train_groups & test_groups),
-        "n_train_advertisers": len(train_groups),
-        "n_test_advertisers": len(test_groups),
-        "test_period_start": min((start_dates[r["ad_id"]] for r in test), default=None),
-    }
+    return (
+        train,
+        test,
+        {
+            "strategy": "newest_first_seen_advertiser_holdout",
+            "advertiser_overlap": len(train_groups & test_groups),
+            "n_train_advertisers": len(train_groups),
+            "n_test_advertisers": len(test_groups),
+            "test_period_start": min((start_dates[r["ad_id"]] for r in test), default=None),
+        },
+    )
 
 
 def _metrics(actual: np.ndarray, predicted: np.ndarray) -> dict[str, float]:
@@ -66,17 +70,23 @@ def segment_metrics(
     predicted: np.ndarray,
     start_dates: dict[str, str],
     minimum_size: int = 10,
+    promotion_minimum_size: int = 100,
+    promotion_minimum_advertisers: int = 10,
 ) -> dict[str, Any]:
     """Evaluate transfer by supplement subcategory and calendar quarter.
 
     Small segments are reported as insufficient rather than producing noisy
-    metrics that look authoritative. Search-query provenance is preferred;
-    product_subcategory is the fallback.
+    metrics that look authoritative. The adjudicated product subcategory is
+    preferred; recorded search queries are only a legacy fallback.
     """
     by_category: dict[str, list[int]] = {}
     by_cohort: dict[str, list[int]] = {}
     for i, row in enumerate(rows):
-        categories = row.get("search_queries") or [row.get("product_subcategory", "unknown")]
+        categories = (
+            [row["product_subcategory"]]
+            if row.get("product_subcategory")
+            else (row.get("search_queries") or ["unknown"])
+        )
         if isinstance(categories, str):
             categories = [categories]
         for category in set(str(c).lower() for c in categories if c):
@@ -93,13 +103,25 @@ def segment_metrics(
             if len(indices) >= minimum_size:
                 result[name] = {
                     "n": len(indices),
+                    "n_advertisers": len(
+                        {
+                            str(rows[index].get("page_id") or f"__ad__{rows[index].get('ad_id')}")
+                            for index in indices
+                        }
+                    ),
                     "status": "ok",
                     **_metrics(actual[indices], predicted[indices]),
                 }
+                result[name]["promotion_supported"] = (
+                    result[name]["n"] >= promotion_minimum_size
+                    and result[name]["n_advertisers"] >= promotion_minimum_advertisers
+                )
         return result
 
     return {
         "minimum_segment_size": minimum_size,
+        "promotion_minimum_segment_size": promotion_minimum_size,
+        "promotion_minimum_advertisers": promotion_minimum_advertisers,
         "subcategories": summarize(by_category),
         "cohorts": summarize(by_cohort),
     }
@@ -129,7 +151,8 @@ def longevity_benchmarks(
             durations.append(max(0.0, float(row.get("days_active") or 0)))
             events.append(is_event_observed(ad, scrape_dates))
         result: dict[str, Any] = {
-            "n": len(durations), "events_observed": int(sum(events)),
+            "n": len(durations),
+            "events_observed": int(sum(events)),
             "status": "insufficient_sample" if len(durations) < minimum_size else "ok",
         }
         if len(durations) < minimum_size or not durations:

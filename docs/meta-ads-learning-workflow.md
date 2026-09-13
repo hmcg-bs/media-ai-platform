@@ -62,16 +62,41 @@ uv run python -m pipeline.validation.phase0_validator sample data/supplements_fr
 The sampler creates 120 rows with stable seed 42 and stratifies across recorded search queries,
 contamination-risk terms (pets, topical products, equipment), and text-derived subcategory
 *candidate* strata. Older corpora do not have per-ad query provenance; candidate strata recover
-review coverage but are explicitly not labels. Fill `is_supplement` and
-`supplement_subcategory` manually. Training with `--taxonomy-labels` accepts only explicit true
-labels and writes the approved subset separately.
+review coverage but are explicitly not labels. Convert the sample/template into the immutable human
+review contract:
+
+```bash
+uv run python -m pipeline.validation.taxonomy_adjudication init \
+  --sample .amp/in/artifacts/supplements_taxonomy_sample_120.json \
+  --template .amp/in/artifacts/supplements_taxonomy_labels_120.json \
+  --out data/supplements_taxonomy_review_v1.json
+```
+
+Humans fill the primary decisions for every row, independently double-review at least 20%, and add
+an independent adjudicator plus rationale for every disagreement. The fixed Supplement
+subcategories are defined in `taxonomy_adjudication.py`; do not invent or silently normalize labels.
+Then validate and publish only explicitly approved Supplements rows:
+
+```bash
+uv run python -m pipeline.validation.taxonomy_adjudication validate \
+  --sample .amp/in/artifacts/supplements_taxonomy_sample_120.json \
+  --review data/supplements_taxonomy_review_v1.json \
+  --report data/supplements_taxonomy_adjudication_report_v1.json \
+  --approved-labels data/supplements_taxonomy_approved_v1.json
+```
+
+Validation fails closed unless every label has reviewer/time provenance, at least 20% is
+double-reviewed, binary Cohen's κ is at least 0.80, and every binary or subcategory disagreement is
+independently adjudicated. The report binds the approved labels by SHA-256. It is not a substitute
+for the human review.
 
 ### 2. Extract, train, evaluate, generate guidance, and sync
 
 ```bash
 uv run python -m pipeline.supplements_workflow \
   --skip-scrape \
-  --taxonomy-labels data/supplements_ground_truth.json \
+  --taxonomy-labels data/supplements_taxonomy_approved_v1.json \
+  --taxonomy-report data/supplements_taxonomy_adjudication_report_v1.json \
   --skip-embeddings \
   --sync-gcp
 ```
@@ -83,10 +108,73 @@ Raw embeddings are ablated and never turned into directives. Generation guidance
 pooled, non-directional, operational, and unevaluable Cox signals. Reports include input hashes,
 schema version, implementation hash, random seed, worker count, and Git provenance.
 
-For future trend tests, preserve each new scrape as a new observation window. First evaluate the
-previous model on newly observed ads/pages and persist that result. Only then may the window be
-promoted into a subsequent training corpus. The current 2026-09-12 corpus is a single scrape window,
-so calendar trend conclusions are not yet supported.
+Training reports now include paired bootstrap 95% intervals for challenger-minus-baseline MAE,
+calibration gap, and fixed predicted-top-20% precision; descriptive raw-feature drift; segment
+advertiser counts; and a fail-closed promotion decision. Promotion requires the entire taxonomy
+gate, clean Git provenance, zero advertiser overlap, point MAE improvement, an MAE-difference
+interval below zero, and top-20% precision's lower interval above the 20% prevalence baseline.
+The untouched holdout must also contain at least 100 rows and 10 advertisers.
+Segment generalization additionally requires at least 100 rows and 10 advertisers; smaller segments
+remain descriptive.
+
+For future trend tests, preserve each new scrape as a new observation window:
+
+```bash
+# Freeze the current baseline once.
+uv run python -m pipeline.model_training.observation_windows \
+  --ads data/supplements_fresh.json \
+  --out data/windows/supplements-baseline-v1.json
+
+# On a genuinely later scrape, chain a new immutable window.
+uv run python -m pipeline.model_training.observation_windows \
+  --ads data/supplements_future.json \
+  --previous-window data/windows/supplements-baseline-v1.json \
+  --out data/windows/supplements-future-v1.json
+
+# Evaluate the old report/specification before any retraining on future rows.
+uv run python -m pipeline.model_training.evaluate_future_window \
+  --baseline-report data/model_training_report_fresh.json \
+  --baseline-matrix data/feature_matrix_fresh.json \
+  --baseline-ads data/supplements_fresh.json \
+  --baseline-window data/windows/supplements-baseline-v1.json \
+  --future-matrix data/supplements_future_matrix.json \
+  --future-ads data/supplements_future.json \
+  --future-window data/windows/supplements-future-v1.json \
+  --evaluation-as-of 2026-11-30T00:00:00Z \
+  --out data/supplements_future_evaluation_v1.json
+```
+
+The evaluator refits only the frozen parameters on the old training rows; future rows cannot affect
+calibration, preprocessing, fitting, or parameter selection. It rejects stale `days_active` values
+that do not match the immutable future snapshot age, active targets younger than 30 days, unreviewed
+taxonomy, broken hashes/window chains, irreproducible splits, and advertiser overlap. Merely waiting
+30 days after a stale snapshot does not mature its label. Only after this evaluation is persisted may
+the future window enter a later training corpus. The current 2026-09-12 corpus is a single window, so
+calendar trend claims remain unsupported.
+
+### 2a. Freeze or promote the Generation handoff
+
+V3 is frozen without changing the consumer's three fixed root files:
+
+```bash
+uv run python -m pipeline.model_training.handoff_bundle build \
+  --guide .amp/in/artifacts/meta_model_handoff_supplements_generation_guide_v3.json \
+  --training-report .amp/in/artifacts/meta_model_handoff_supplements_training_report_v3.json \
+  --survival-report .amp/in/artifacts/supplements_survival_validation_v1.json \
+  --out .amp/in/artifacts/handoffs/supplements-v3-bundle-v2 \
+  --version supplements-v3-bundle-v2 --freeze-existing-v3
+uv run python -m pipeline.model_training.handoff_bundle verify \
+  --bundle .amp/in/artifacts/handoffs/supplements-v3-bundle-v2
+```
+
+The special freeze accepts only the three known v3 hashes and corrected zero-event Cox semantics.
+Bundle v2 uses the Generation consumer's canonical root filenames while preserving identical v3
+bytes; the first manifest remains immutable and superseded for automated path resolution only.
+Any new immutable version requires an objective `promotion_decision.status=promoted`, consistent
+leakage-safe split/model results, a worse embedding ablation, and a guide whose directional buckets
+are independently re-derived from no-embedding SHAP. Generation currently does not discover bundle
+manifests, so v4 also requires a coordinated loader change and shadow validation; never overwrite
+v3 filenames for compatibility. Generated outputs are never Meta performance labels.
 
 ### 3. Poll lifecycle and validate horizons
 

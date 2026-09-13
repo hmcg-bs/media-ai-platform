@@ -4,10 +4,13 @@ This is the implemented Step 1 → Step 3 local workflow. It is deterministic
 except for the paid Apify scrape and Replicate vision/embeddings. No ROAS or
 public engagement signal is available for the current commercial-ad corpus.
 
-The complete Supplements workflow is resumable and can be invoked with:
+The complete Supplements workflow is resumable and requires a passing human-taxonomy report bound
+to the approved labels:
 
 ```bash
-uv run python -m pipeline.supplements_workflow
+uv run python -m pipeline.supplements_workflow \
+  --taxonomy-labels data/supplements_taxonomy_approved_v1.json \
+  --taxonomy-report data/supplements_taxonomy_adjudication_report_v1.json
 ```
 
 Use `--sample-size 20` for an end-to-end paid pilot. The workflow owns one
@@ -50,10 +53,10 @@ records completed queries in `<out>.state.json`. A restart resumes without
 re-running completed paid queries. One query failure is logged and left
 incomplete so a later invocation retries it.
 
-Each ad retains every discovery `search_queries` match. This is corpus
-provenance used for supplement-subcategory coverage/evaluation, not a model
-input. Older corpora without that field use a documented deterministic
-copy-based subcategory fallback.
+Each ad retains every discovery `search_queries` match. This is corpus provenance, not human product
+truth or a model input. Only rows approved by the versioned two-reviewer/adjudication workflow enter
+Extraction/training. The adjudicated subcategory is the evaluation segment; query and deterministic
+copy heuristics are legacy fallbacks only.
 
 Only one process may own a given output path. A second writer fails fast on the
 sidecar lock rather than corrupting a checkpoint. Concurrent jobs are supported
@@ -119,11 +122,12 @@ pooled before one-hot encoding. This prevents near-unique cognitive descriptions
 (for example free-text texture and product-state values) from creating thousands
 of advertiser-specific columns; holdout values and frequencies are never used
 to form the pool.
-Reports include R², MAE, a
-median baseline comparison, top-20%-precision, advertiser overlap, SHAP
-attribution, seed, worker count, and SHA-256 hashes of both inputs. Component
-models use an expanding time-series CV. Ads with no `end_date` are retained as
-right-censored observations in the Cox Longevity model.
+Reports include R², MAE, a median baseline comparison, top-20%-precision, paired bootstrap
+uncertainty, calibration, descriptive feature drift, advertiser/segment support, SHAP attribution,
+taxonomy status, an objective promotion decision, seed, worker count, and SHA-256 hashes of both
+inputs. Component models use an expanding time-series CV. Ads with no observed lifecycle ending are
+retained as right-censored observations in the Cox Longevity model; an active actor `end_date` is not
+an ending.
 
 The report also includes test MAE/calibration by start quarter and supplement
 subcategory, with a minimum-sample gate, plus Kaplan–Meier survival estimates
