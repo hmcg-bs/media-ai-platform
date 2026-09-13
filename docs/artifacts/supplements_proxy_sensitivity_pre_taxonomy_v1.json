@@ -1,0 +1,2170 @@
+{
+  "report_schema_version": "proxy-sensitivity-report-v1",
+  "status": "analysis_only_no_automatic_weight_selection",
+  "evidence_boundary": "This report tests sensitivity of a public-data proxy. It is not conversion, ROAS, causal, lifecycle-ending, or generation-quality evidence.",
+  "loop_isolation": "Generated outputs and reviewer defect/craft labels are prohibited as Meta labels.",
+  "production_effect": "none; immutable v3 remains selected",
+  "rows_content_sha256": "1e7a5df610a7d9fd9ce07d048055427fac18cf7b4a1e4e51b270407059e0c8ab",
+  "random_state": 42,
+  "weight_scenarios": {
+    "baseline_70_20_10": {
+      "longevity": 0.7,
+      "longevity_scaling_interaction": 0.2,
+      "variant_boost": 0.1
+    },
+    "longevity_minus_10_scaling_plus_10": {
+      "longevity": 0.6,
+      "longevity_scaling_interaction": 0.3,
+      "variant_boost": 0.1
+    },
+    "scaling_minus_10_longevity_plus_10": {
+      "longevity": 0.8,
+      "longevity_scaling_interaction": 0.1,
+      "variant_boost": 0.1
+    },
+    "longevity_minus_10_variant_plus_10": {
+      "longevity": 0.6,
+      "longevity_scaling_interaction": 0.2,
+      "variant_boost": 0.2
+    },
+    "without_longevity": {
+      "longevity": 0.0,
+      "longevity_scaling_interaction": 0.6666666666666666,
+      "variant_boost": 0.3333333333333333
+    },
+    "without_scaling_interaction": {
+      "longevity": 0.875,
+      "longevity_scaling_interaction": 0.0,
+      "variant_boost": 0.125
+    },
+    "without_variant_boost": {
+      "longevity": 0.7777777777777778,
+      "longevity_scaling_interaction": 0.2222222222222222,
+      "variant_boost": 0.0
+    }
+  },
+  "scenarios": {
+    "baseline_70_20_10": {
+      "weights": {
+        "longevity": 0.7,
+        "longevity_scaling_interaction": 0.2,
+        "variant_boost": 0.1
+      },
+      "proxy_ranking_vs_baseline": {
+        "spearman_proxy_score_rank_correlation": 1.0,
+        "top_20pct_jaccard": 1.0
+      },
+      "fit_duration_seconds": 1.29899,
+      "n_train": 499,
+      "n_test": 101,
+      "n_test_advertisers": 76,
+      "advertiser_overlap": 0,
+      "test_mae": 0.3509,
+      "baseline_mae": 0.3731,
+      "top_20pct_precision": 0.1905,
+      "uncertainty": {
+        "method": "paired_advertiser_cluster_bootstrap",
+        "n_resamples": 2000,
+        "random_state": 42,
+        "n_clusters": 76,
+        "n_top_set_clusters": 18,
+        "mae_difference_challenger_minus_baseline": -0.02215,
+        "mae_difference_confidence_interval_95": [
+          -0.04112,
+          -0.00324
+        ],
+        "calibration_gap": 0.35092,
+        "calibration_gap_confidence_interval_95": [
+          0.33284,
+          0.36879
+        ],
+        "top_20pct_precision": 0.19048,
+        "top_20pct_precision_confidence_interval_95": [
+          0.05,
+          0.34783
+        ],
+        "top_20pct_prevalence_baseline": 0.2
+      },
+      "top_features_by_shap": [
+        {
+          "feature": "numeric__creative_avg_words_per_block",
+          "mean_abs_shap": 0.02305,
+          "mean_signed_shap": 0.00754
+        },
+        {
+          "feature": "numeric__creative_total_word_count",
+          "mean_abs_shap": 0.02047,
+          "mean_signed_shap": -0.00175
+        },
+        {
+          "feature": "numeric__creative_headline_y_center",
+          "mean_abs_shap": 0.01525,
+          "mean_signed_shap": -0.00302
+        },
+        {
+          "feature": "numeric__creative_reading_grade_level",
+          "mean_abs_shap": 0.01479,
+          "mean_signed_shap": -0.00154
+        },
+        {
+          "feature": "numeric__publisher_count",
+          "mean_abs_shap": 0.01312,
+          "mean_signed_shap": -0.00554
+        },
+        {
+          "feature": "numeric__palette_vibrancy",
+          "mean_abs_shap": 0.01268,
+          "mean_signed_shap": 0.00023
+        },
+        {
+          "feature": "numeric__body_length",
+          "mean_abs_shap": 0.01235,
+          "mean_signed_shap": -0.00102
+        },
+        {
+          "feature": "numeric__creative_headline_x_center",
+          "mean_abs_shap": 0.01216,
+          "mean_signed_shap": -0.00205
+        },
+        {
+          "feature": "numeric__creative_secondary_prop_count",
+          "mean_abs_shap": 0.00925,
+          "mean_signed_shap": -0.00117
+        },
+        {
+          "feature": "numeric__creative_uppercase_ratio",
+          "mean_abs_shap": 0.00912,
+          "mean_signed_shap": -0.00127
+        },
+        {
+          "feature": "numeric__creative_copy_canvas_coverage",
+          "mean_abs_shap": 0.009,
+          "mean_signed_shap": 0.00019
+        },
+        {
+          "feature": "numeric__creative_total_char_count",
+          "mean_abs_shap": 0.00879,
+          "mean_signed_shap": 0.00112
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Unknown",
+          "mean_abs_shap": 0.00822,
+          "mean_signed_shap": -0.00227
+        },
+        {
+          "feature": "numeric__creative_authority_flag_count",
+          "mean_abs_shap": 0.00819,
+          "mean_signed_shap": 3e-05
+        },
+        {
+          "feature": "numeric__title_length",
+          "mean_abs_shap": 0.00791,
+          "mean_signed_shap": -0.00113
+        },
+        {
+          "feature": "categorical__creative_headline_zone_middle",
+          "mean_abs_shap": 0.00777,
+          "mean_signed_shap": -0.00055
+        },
+        {
+          "feature": "numeric__creative_headline_to_subtext_scale_ratio",
+          "mean_abs_shap": 0.00759,
+          "mean_signed_shap": -0.00072
+        },
+        {
+          "feature": "categorical__product_subcategory_omega-3",
+          "mean_abs_shap": 0.00708,
+          "mean_signed_shap": -0.00161
+        },
+        {
+          "feature": "numeric__creative_headline_word_count",
+          "mean_abs_shap": 0.00525,
+          "mean_signed_shap": -0.00131
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Testimonial",
+          "mean_abs_shap": 0.00415,
+          "mean_signed_shap": -0.00016
+        },
+        {
+          "feature": "numeric__psychological_warmth_index",
+          "mean_abs_shap": 0.00387,
+          "mean_signed_shap": 0.00047
+        },
+        {
+          "feature": "numeric__creative_n_blocks_bottom",
+          "mean_abs_shap": 0.00368,
+          "mean_signed_shap": 0.00054
+        },
+        {
+          "feature": "numeric__creative_copy_block_count",
+          "mean_abs_shap": 0.00368,
+          "mean_signed_shap": 0.00015
+        },
+        {
+          "feature": "numeric__creative_n_blocks_top",
+          "mean_abs_shap": 0.00364,
+          "mean_signed_shap": 0.00102
+        },
+        {
+          "feature": "numeric__creative_whitespace_ratio",
+          "mean_abs_shap": 0.00348,
+          "mean_signed_shap": 0.00031
+        },
+        {
+          "feature": "categorical__creative_text_alignment_left",
+          "mean_abs_shap": 0.0034,
+          "mean_signed_shap": -0.00016
+        },
+        {
+          "feature": "categorical__creative_primary_human_expression_N/A",
+          "mean_abs_shap": 0.00329,
+          "mean_signed_shap": -0.00079
+        },
+        {
+          "feature": "categorical__background_style_Studio",
+          "mean_abs_shap": 0.00324,
+          "mean_signed_shap": -0.00103
+        },
+        {
+          "feature": "categorical__cta_type_learn_more",
+          "mean_abs_shap": 0.00324,
+          "mean_signed_shap": -3e-05
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Social Proof",
+          "mean_abs_shap": 0.00317,
+          "mean_signed_shap": 0.00012
+        }
+      ]
+    },
+    "longevity_minus_10_scaling_plus_10": {
+      "weights": {
+        "longevity": 0.6,
+        "longevity_scaling_interaction": 0.3,
+        "variant_boost": 0.1
+      },
+      "proxy_ranking_vs_baseline": {
+        "spearman_proxy_score_rank_correlation": 0.99704,
+        "top_20pct_jaccard": 0.80451
+      },
+      "fit_duration_seconds": 1.27432,
+      "n_train": 499,
+      "n_test": 101,
+      "n_test_advertisers": 76,
+      "advertiser_overlap": 0,
+      "test_mae": 0.3284,
+      "baseline_mae": 0.3476,
+      "top_20pct_precision": 0.2381,
+      "uncertainty": {
+        "method": "paired_advertiser_cluster_bootstrap",
+        "n_resamples": 2000,
+        "random_state": 42,
+        "n_clusters": 76,
+        "n_top_set_clusters": 20,
+        "mae_difference_challenger_minus_baseline": -0.01928,
+        "mae_difference_confidence_interval_95": [
+          -0.03887,
+          0.00066
+        ],
+        "calibration_gap": 0.32835,
+        "calibration_gap_confidence_interval_95": [
+          0.30976,
+          0.34794
+        ],
+        "top_20pct_precision": 0.2381,
+        "top_20pct_precision_confidence_interval_95": [
+          0.08333,
+          0.45
+        ],
+        "top_20pct_prevalence_baseline": 0.2
+      },
+      "top_features_by_shap": [
+        {
+          "feature": "numeric__creative_avg_words_per_block",
+          "mean_abs_shap": 0.02155,
+          "mean_signed_shap": 0.00919
+        },
+        {
+          "feature": "numeric__creative_total_word_count",
+          "mean_abs_shap": 0.0186,
+          "mean_signed_shap": 0.00021
+        },
+        {
+          "feature": "numeric__creative_reading_grade_level",
+          "mean_abs_shap": 0.01768,
+          "mean_signed_shap": -0.00128
+        },
+        {
+          "feature": "numeric__palette_vibrancy",
+          "mean_abs_shap": 0.01712,
+          "mean_signed_shap": 0.00132
+        },
+        {
+          "feature": "numeric__creative_headline_y_center",
+          "mean_abs_shap": 0.01651,
+          "mean_signed_shap": -0.00372
+        },
+        {
+          "feature": "numeric__body_length",
+          "mean_abs_shap": 0.01409,
+          "mean_signed_shap": -0.00148
+        },
+        {
+          "feature": "numeric__publisher_count",
+          "mean_abs_shap": 0.01269,
+          "mean_signed_shap": -0.00611
+        },
+        {
+          "feature": "numeric__creative_headline_x_center",
+          "mean_abs_shap": 0.01252,
+          "mean_signed_shap": -0.00166
+        },
+        {
+          "feature": "numeric__creative_secondary_prop_count",
+          "mean_abs_shap": 0.01151,
+          "mean_signed_shap": -0.00144
+        },
+        {
+          "feature": "numeric__creative_headline_to_subtext_scale_ratio",
+          "mean_abs_shap": 0.01136,
+          "mean_signed_shap": -0.00214
+        },
+        {
+          "feature": "numeric__creative_authority_flag_count",
+          "mean_abs_shap": 0.01118,
+          "mean_signed_shap": 0.00085
+        },
+        {
+          "feature": "numeric__creative_total_char_count",
+          "mean_abs_shap": 0.01051,
+          "mean_signed_shap": 0.00223
+        },
+        {
+          "feature": "numeric__creative_copy_canvas_coverage",
+          "mean_abs_shap": 0.00961,
+          "mean_signed_shap": -0.00203
+        },
+        {
+          "feature": "numeric__creative_uppercase_ratio",
+          "mean_abs_shap": 0.00908,
+          "mean_signed_shap": -0.00155
+        },
+        {
+          "feature": "numeric__creative_headline_word_count",
+          "mean_abs_shap": 0.00895,
+          "mean_signed_shap": -0.00332
+        },
+        {
+          "feature": "numeric__title_length",
+          "mean_abs_shap": 0.00753,
+          "mean_signed_shap": -0.00083
+        },
+        {
+          "feature": "categorical__creative_headline_zone_middle",
+          "mean_abs_shap": 0.00686,
+          "mean_signed_shap": -4e-05
+        },
+        {
+          "feature": "categorical__product_subcategory_omega-3",
+          "mean_abs_shap": 0.00665,
+          "mean_signed_shap": -0.0018
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Unknown",
+          "mean_abs_shap": 0.00633,
+          "mean_signed_shap": -0.00248
+        },
+        {
+          "feature": "numeric__creative_copy_block_count",
+          "mean_abs_shap": 0.00539,
+          "mean_signed_shap": 0.00115
+        },
+        {
+          "feature": "numeric__creative_headline_char_count",
+          "mean_abs_shap": 0.00512,
+          "mean_signed_shap": 0.00013
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Social Proof",
+          "mean_abs_shap": 0.00496,
+          "mean_signed_shap": 6e-05
+        },
+        {
+          "feature": "numeric__creative_n_blocks_bottom",
+          "mean_abs_shap": 0.0049,
+          "mean_signed_shap": -0.00059
+        },
+        {
+          "feature": "numeric__psychological_warmth_index",
+          "mean_abs_shap": 0.00474,
+          "mean_signed_shap": 0.00043
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Testimonial",
+          "mean_abs_shap": 0.00462,
+          "mean_signed_shap": -0.00026
+        },
+        {
+          "feature": "categorical__creative_primary_human_expression_N/A",
+          "mean_abs_shap": 0.00409,
+          "mean_signed_shap": -0.00091
+        },
+        {
+          "feature": "categorical__creative_primary_human_expression_infrequent_sklearn",
+          "mean_abs_shap": 0.00403,
+          "mean_signed_shap": -0.00112
+        },
+        {
+          "feature": "categorical__season_positioning_none",
+          "mean_abs_shap": 0.00394,
+          "mean_signed_shap": 0.00078
+        },
+        {
+          "feature": "categorical__creative_text_alignment_left",
+          "mean_abs_shap": 0.00391,
+          "mean_signed_shap": -0.00011
+        },
+        {
+          "feature": "categorical__product_subcategory_multivitamin",
+          "mean_abs_shap": 0.00357,
+          "mean_signed_shap": -0.00046
+        }
+      ]
+    },
+    "scaling_minus_10_longevity_plus_10": {
+      "weights": {
+        "longevity": 0.8,
+        "longevity_scaling_interaction": 0.1,
+        "variant_boost": 0.1
+      },
+      "proxy_ranking_vs_baseline": {
+        "spearman_proxy_score_rank_correlation": 0.99763,
+        "top_20pct_jaccard": 0.90476
+      },
+      "fit_duration_seconds": 1.26151,
+      "n_train": 499,
+      "n_test": 101,
+      "n_test_advertisers": 76,
+      "advertiser_overlap": 0,
+      "test_mae": 0.3786,
+      "baseline_mae": 0.3906,
+      "top_20pct_precision": 0.2381,
+      "uncertainty": {
+        "method": "paired_advertiser_cluster_bootstrap",
+        "n_resamples": 2000,
+        "random_state": 42,
+        "n_clusters": 76,
+        "n_top_set_clusters": 19,
+        "mae_difference_challenger_minus_baseline": -0.01203,
+        "mae_difference_confidence_interval_95": [
+          -0.03307,
+          0.01106
+        ],
+        "calibration_gap": 0.3786,
+        "calibration_gap_confidence_interval_95": [
+          0.35759,
+          0.40067
+        ],
+        "top_20pct_precision": 0.2381,
+        "top_20pct_precision_confidence_interval_95": [
+          0.08687,
+          0.40909
+        ],
+        "top_20pct_prevalence_baseline": 0.2
+      },
+      "top_features_by_shap": [
+        {
+          "feature": "numeric__creative_avg_words_per_block",
+          "mean_abs_shap": 0.02967,
+          "mean_signed_shap": 0.01086
+        },
+        {
+          "feature": "numeric__creative_total_word_count",
+          "mean_abs_shap": 0.02407,
+          "mean_signed_shap": -0.00062
+        },
+        {
+          "feature": "numeric__body_length",
+          "mean_abs_shap": 0.01767,
+          "mean_signed_shap": -0.00021
+        },
+        {
+          "feature": "numeric__creative_reading_grade_level",
+          "mean_abs_shap": 0.01764,
+          "mean_signed_shap": -0.00254
+        },
+        {
+          "feature": "numeric__creative_headline_y_center",
+          "mean_abs_shap": 0.01721,
+          "mean_signed_shap": -0.00177
+        },
+        {
+          "feature": "numeric__palette_vibrancy",
+          "mean_abs_shap": 0.01712,
+          "mean_signed_shap": 0.00212
+        },
+        {
+          "feature": "numeric__creative_headline_x_center",
+          "mean_abs_shap": 0.01522,
+          "mean_signed_shap": -0.00248
+        },
+        {
+          "feature": "numeric__publisher_count",
+          "mean_abs_shap": 0.01308,
+          "mean_signed_shap": -0.0043
+        },
+        {
+          "feature": "numeric__creative_authority_flag_count",
+          "mean_abs_shap": 0.01287,
+          "mean_signed_shap": 0.00157
+        },
+        {
+          "feature": "numeric__creative_secondary_prop_count",
+          "mean_abs_shap": 0.01241,
+          "mean_signed_shap": -0.00157
+        },
+        {
+          "feature": "numeric__creative_headline_to_subtext_scale_ratio",
+          "mean_abs_shap": 0.01065,
+          "mean_signed_shap": 0.00083
+        },
+        {
+          "feature": "numeric__creative_total_char_count",
+          "mean_abs_shap": 0.01013,
+          "mean_signed_shap": 0.00323
+        },
+        {
+          "feature": "numeric__creative_copy_canvas_coverage",
+          "mean_abs_shap": 0.01003,
+          "mean_signed_shap": -0.00267
+        },
+        {
+          "feature": "numeric__title_length",
+          "mean_abs_shap": 0.00995,
+          "mean_signed_shap": -0.00186
+        },
+        {
+          "feature": "numeric__creative_headline_word_count",
+          "mean_abs_shap": 0.00911,
+          "mean_signed_shap": -0.00349
+        },
+        {
+          "feature": "categorical__product_subcategory_omega-3",
+          "mean_abs_shap": 0.00904,
+          "mean_signed_shap": -0.00252
+        },
+        {
+          "feature": "numeric__creative_uppercase_ratio",
+          "mean_abs_shap": 0.00863,
+          "mean_signed_shap": -0.00123
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Unknown",
+          "mean_abs_shap": 0.00857,
+          "mean_signed_shap": -0.00275
+        },
+        {
+          "feature": "categorical__creative_headline_zone_middle",
+          "mean_abs_shap": 0.00741,
+          "mean_signed_shap": -0.00035
+        },
+        {
+          "feature": "numeric__psychological_warmth_index",
+          "mean_abs_shap": 0.00586,
+          "mean_signed_shap": 0.00091
+        },
+        {
+          "feature": "categorical__creative_text_alignment_left",
+          "mean_abs_shap": 0.00573,
+          "mean_signed_shap": -0.00037
+        },
+        {
+          "feature": "numeric__creative_headline_char_count",
+          "mean_abs_shap": 0.00556,
+          "mean_signed_shap": 0.00027
+        },
+        {
+          "feature": "numeric__creative_copy_block_count",
+          "mean_abs_shap": 0.00489,
+          "mean_signed_shap": 0.0003
+        },
+        {
+          "feature": "categorical__creative_primary_human_demographic_Young adult female",
+          "mean_abs_shap": 0.0047,
+          "mean_signed_shap": 0.00086
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Social Proof",
+          "mean_abs_shap": 0.00462,
+          "mean_signed_shap": 0.00028
+        },
+        {
+          "feature": "categorical__creative_primary_human_expression_N/A",
+          "mean_abs_shap": 0.00458,
+          "mean_signed_shap": -0.001
+        },
+        {
+          "feature": "categorical__background_style_Studio",
+          "mean_abs_shap": 0.00423,
+          "mean_signed_shap": -0.00136
+        },
+        {
+          "feature": "categorical__creative_primary_human_expression_infrequent_sklearn",
+          "mean_abs_shap": 0.00419,
+          "mean_signed_shap": -0.0012
+        },
+        {
+          "feature": "numeric__creative_n_blocks_bottom",
+          "mean_abs_shap": 0.00399,
+          "mean_signed_shap": -0.00106
+        },
+        {
+          "feature": "categorical__product_subcategory_multivitamin",
+          "mean_abs_shap": 0.00393,
+          "mean_signed_shap": -0.00051
+        }
+      ]
+    },
+    "longevity_minus_10_variant_plus_10": {
+      "weights": {
+        "longevity": 0.6,
+        "longevity_scaling_interaction": 0.2,
+        "variant_boost": 0.2
+      },
+      "proxy_ranking_vs_baseline": {
+        "spearman_proxy_score_rank_correlation": 0.99067,
+        "top_20pct_jaccard": 0.79104
+      },
+      "fit_duration_seconds": 1.27485,
+      "n_train": 499,
+      "n_test": 101,
+      "n_test_advertisers": 76,
+      "advertiser_overlap": 0,
+      "test_mae": 0.3092,
+      "baseline_mae": 0.3257,
+      "top_20pct_precision": 0.2857,
+      "uncertainty": {
+        "method": "paired_advertiser_cluster_bootstrap",
+        "n_resamples": 2000,
+        "random_state": 42,
+        "n_clusters": 76,
+        "n_top_set_clusters": 19,
+        "mae_difference_challenger_minus_baseline": -0.01646,
+        "mae_difference_confidence_interval_95": [
+          -0.03346,
+          0.00221
+        ],
+        "calibration_gap": 0.30922,
+        "calibration_gap_confidence_interval_95": [
+          0.29259,
+          0.32631
+        ],
+        "top_20pct_precision": 0.28571,
+        "top_20pct_precision_confidence_interval_95": [
+          0.09524,
+          0.5
+        ],
+        "top_20pct_prevalence_baseline": 0.2
+      },
+      "top_features_by_shap": [
+        {
+          "feature": "numeric__creative_avg_words_per_block",
+          "mean_abs_shap": 0.02219,
+          "mean_signed_shap": 0.00809
+        },
+        {
+          "feature": "numeric__creative_total_word_count",
+          "mean_abs_shap": 0.01648,
+          "mean_signed_shap": -0.00073
+        },
+        {
+          "feature": "numeric__body_length",
+          "mean_abs_shap": 0.01521,
+          "mean_signed_shap": -0.00043
+        },
+        {
+          "feature": "numeric__creative_headline_y_center",
+          "mean_abs_shap": 0.01488,
+          "mean_signed_shap": -0.00229
+        },
+        {
+          "feature": "numeric__palette_vibrancy",
+          "mean_abs_shap": 0.01423,
+          "mean_signed_shap": 0.00154
+        },
+        {
+          "feature": "numeric__creative_reading_grade_level",
+          "mean_abs_shap": 0.01408,
+          "mean_signed_shap": -0.00144
+        },
+        {
+          "feature": "numeric__creative_headline_x_center",
+          "mean_abs_shap": 0.01333,
+          "mean_signed_shap": -0.00121
+        },
+        {
+          "feature": "numeric__creative_secondary_prop_count",
+          "mean_abs_shap": 0.01123,
+          "mean_signed_shap": -0.00128
+        },
+        {
+          "feature": "numeric__creative_copy_canvas_coverage",
+          "mean_abs_shap": 0.01094,
+          "mean_signed_shap": -0.00132
+        },
+        {
+          "feature": "numeric__creative_total_char_count",
+          "mean_abs_shap": 0.0104,
+          "mean_signed_shap": 0.00219
+        },
+        {
+          "feature": "numeric__creative_headline_to_subtext_scale_ratio",
+          "mean_abs_shap": 0.00981,
+          "mean_signed_shap": -0.00049
+        },
+        {
+          "feature": "numeric__creative_authority_flag_count",
+          "mean_abs_shap": 0.00946,
+          "mean_signed_shap": 0.00159
+        },
+        {
+          "feature": "numeric__publisher_count",
+          "mean_abs_shap": 0.00852,
+          "mean_signed_shap": -0.00546
+        },
+        {
+          "feature": "numeric__title_length",
+          "mean_abs_shap": 0.00798,
+          "mean_signed_shap": -0.00198
+        },
+        {
+          "feature": "numeric__creative_uppercase_ratio",
+          "mean_abs_shap": 0.00773,
+          "mean_signed_shap": 0.00122
+        },
+        {
+          "feature": "categorical__product_subcategory_omega-3",
+          "mean_abs_shap": 0.00756,
+          "mean_signed_shap": -0.00174
+        },
+        {
+          "feature": "numeric__creative_headline_word_count",
+          "mean_abs_shap": 0.00669,
+          "mean_signed_shap": -0.00199
+        },
+        {
+          "feature": "categorical__creative_headline_zone_middle",
+          "mean_abs_shap": 0.00653,
+          "mean_signed_shap": -0.00023
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Unknown",
+          "mean_abs_shap": 0.00603,
+          "mean_signed_shap": -0.00212
+        },
+        {
+          "feature": "numeric__creative_human_presence",
+          "mean_abs_shap": 0.00599,
+          "mean_signed_shap": 0.00112
+        },
+        {
+          "feature": "numeric__creative_n_blocks_bottom",
+          "mean_abs_shap": 0.00544,
+          "mean_signed_shap": -0.00034
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Testimonial",
+          "mean_abs_shap": 0.00532,
+          "mean_signed_shap": -0.00014
+        },
+        {
+          "feature": "numeric__psychological_warmth_index",
+          "mean_abs_shap": 0.00499,
+          "mean_signed_shap": 0.00086
+        },
+        {
+          "feature": "numeric__creative_whitespace_ratio",
+          "mean_abs_shap": 0.00497,
+          "mean_signed_shap": -0.0001
+        },
+        {
+          "feature": "numeric__creative_copy_block_count",
+          "mean_abs_shap": 0.00495,
+          "mean_signed_shap": 0.00057
+        },
+        {
+          "feature": "numeric__creative_n_blocks_middle",
+          "mean_abs_shap": 0.00457,
+          "mean_signed_shap": 0.00043
+        },
+        {
+          "feature": "numeric__creative_object_relationship_count",
+          "mean_abs_shap": 0.00398,
+          "mean_signed_shap": 0.00077
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Social Proof",
+          "mean_abs_shap": 0.00398,
+          "mean_signed_shap": 0.00016
+        },
+        {
+          "feature": "numeric__creative_n_blocks_top",
+          "mean_abs_shap": 0.00387,
+          "mean_signed_shap": 0.00038
+        },
+        {
+          "feature": "categorical__dominant_color_red",
+          "mean_abs_shap": 0.00371,
+          "mean_signed_shap": 0.00068
+        }
+      ]
+    },
+    "without_longevity": {
+      "weights": {
+        "longevity": 0.0,
+        "longevity_scaling_interaction": 0.6666666666666666,
+        "variant_boost": 0.3333333333333333
+      },
+      "proxy_ranking_vs_baseline": {
+        "spearman_proxy_score_rank_correlation": 0.69064,
+        "top_20pct_jaccard": 0.34831
+      },
+      "fit_duration_seconds": 1.2897,
+      "n_train": 499,
+      "n_test": 101,
+      "n_test_advertisers": 76,
+      "advertiser_overlap": 0,
+      "test_mae": 0.1386,
+      "baseline_mae": 0.1185,
+      "top_20pct_precision": 0.1905,
+      "uncertainty": {
+        "method": "paired_advertiser_cluster_bootstrap",
+        "n_resamples": 2000,
+        "random_state": 42,
+        "n_clusters": 76,
+        "n_top_set_clusters": 19,
+        "mae_difference_challenger_minus_baseline": 0.02005,
+        "mae_difference_confidence_interval_95": [
+          0.00895,
+          0.03118
+        ],
+        "calibration_gap": 0.1374,
+        "calibration_gap_confidence_interval_95": [
+          0.12527,
+          0.15174
+        ],
+        "top_20pct_precision": 0.19048,
+        "top_20pct_precision_confidence_interval_95": [
+          0.04762,
+          0.36376
+        ],
+        "top_20pct_prevalence_baseline": 0.2
+      },
+      "top_features_by_shap": [
+        {
+          "feature": "numeric__body_length",
+          "mean_abs_shap": 0.0128,
+          "mean_signed_shap": 0.00418
+        },
+        {
+          "feature": "numeric__creative_total_char_count",
+          "mean_abs_shap": 0.01085,
+          "mean_signed_shap": 0.00081
+        },
+        {
+          "feature": "numeric__creative_copy_canvas_coverage",
+          "mean_abs_shap": 0.01016,
+          "mean_signed_shap": -0.0019
+        },
+        {
+          "feature": "numeric__creative_avg_words_per_block",
+          "mean_abs_shap": 0.00933,
+          "mean_signed_shap": 0.00232
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Direct Offer",
+          "mean_abs_shap": 0.00874,
+          "mean_signed_shap": -0.00021
+        },
+        {
+          "feature": "numeric__creative_uppercase_ratio",
+          "mean_abs_shap": 0.00819,
+          "mean_signed_shap": 0.00172
+        },
+        {
+          "feature": "numeric__creative_reading_grade_level",
+          "mean_abs_shap": 0.00757,
+          "mean_signed_shap": -0.00062
+        },
+        {
+          "feature": "numeric__creative_headline_y_center",
+          "mean_abs_shap": 0.00703,
+          "mean_signed_shap": -0.00133
+        },
+        {
+          "feature": "categorical__creative_headline_zone_middle",
+          "mean_abs_shap": 0.00693,
+          "mean_signed_shap": -0.00062
+        },
+        {
+          "feature": "numeric__palette_vibrancy",
+          "mean_abs_shap": 0.00659,
+          "mean_signed_shap": 0.00051
+        },
+        {
+          "feature": "numeric__publisher_count",
+          "mean_abs_shap": 0.00621,
+          "mean_signed_shap": -0.00363
+        },
+        {
+          "feature": "numeric__creative_secondary_prop_count",
+          "mean_abs_shap": 0.00599,
+          "mean_signed_shap": -0.00035
+        },
+        {
+          "feature": "numeric__creative_whitespace_ratio",
+          "mean_abs_shap": 0.00579,
+          "mean_signed_shap": -9e-05
+        },
+        {
+          "feature": "numeric__creative_human_presence",
+          "mean_abs_shap": 0.00547,
+          "mean_signed_shap": 0.00091
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Testimonial",
+          "mean_abs_shap": 0.00531,
+          "mean_signed_shap": -0.0001
+        },
+        {
+          "feature": "numeric__creative_headline_x_center",
+          "mean_abs_shap": 0.00516,
+          "mean_signed_shap": 0.00082
+        },
+        {
+          "feature": "numeric__creative_object_relationship_count",
+          "mean_abs_shap": 0.00488,
+          "mean_signed_shap": 0.00091
+        },
+        {
+          "feature": "categorical__dominant_color_white",
+          "mean_abs_shap": 0.00471,
+          "mean_signed_shap": 0.0023
+        },
+        {
+          "feature": "numeric__creative_headline_word_count",
+          "mean_abs_shap": 0.0045,
+          "mean_signed_shap": -0.0008
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Social Proof",
+          "mean_abs_shap": 0.00426,
+          "mean_signed_shap": -7e-05
+        },
+        {
+          "feature": "numeric__creative_total_word_count",
+          "mean_abs_shap": 0.0042,
+          "mean_signed_shap": -0.00059
+        },
+        {
+          "feature": "numeric__creative_n_blocks_middle",
+          "mean_abs_shap": 0.00409,
+          "mean_signed_shap": 0.00096
+        },
+        {
+          "feature": "categorical__creative_texture_type_n/a",
+          "mean_abs_shap": 0.0034,
+          "mean_signed_shap": -0.001
+        },
+        {
+          "feature": "numeric__creative_authority_flag_count",
+          "mean_abs_shap": 0.00317,
+          "mean_signed_shap": 0.00013
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Unknown",
+          "mean_abs_shap": 0.00273,
+          "mean_signed_shap": -0.00073
+        },
+        {
+          "feature": "numeric__creative_n_blocks_bottom",
+          "mean_abs_shap": 0.00267,
+          "mean_signed_shap": 0.00028
+        },
+        {
+          "feature": "numeric__creative_headline_to_subtext_scale_ratio",
+          "mean_abs_shap": 0.0026,
+          "mean_signed_shap": -0.00061
+        },
+        {
+          "feature": "categorical__product_subcategory_other supplements",
+          "mean_abs_shap": 0.00259,
+          "mean_signed_shap": -0.00055
+        },
+        {
+          "feature": "categorical__creative_primary_human_expression_N/A",
+          "mean_abs_shap": 0.00249,
+          "mean_signed_shap": -0.00074
+        },
+        {
+          "feature": "categorical__product_subcategory_vitamins",
+          "mean_abs_shap": 0.00242,
+          "mean_signed_shap": -0.00054
+        }
+      ]
+    },
+    "without_scaling_interaction": {
+      "weights": {
+        "longevity": 0.875,
+        "longevity_scaling_interaction": 0.0,
+        "variant_boost": 0.125
+      },
+      "proxy_ranking_vs_baseline": {
+        "spearman_proxy_score_rank_correlation": 0.99171,
+        "top_20pct_jaccard": 0.79104
+      },
+      "fit_duration_seconds": 1.30012,
+      "n_train": 499,
+      "n_test": 101,
+      "n_test_advertisers": 76,
+      "advertiser_overlap": 0,
+      "test_mae": 0.3837,
+      "baseline_mae": 0.4085,
+      "top_20pct_precision": 0.1905,
+      "uncertainty": {
+        "method": "paired_advertiser_cluster_bootstrap",
+        "n_resamples": 2000,
+        "random_state": 42,
+        "n_clusters": 76,
+        "n_top_set_clusters": 18,
+        "mae_difference_challenger_minus_baseline": -0.02475,
+        "mae_difference_confidence_interval_95": [
+          -0.04468,
+          -0.00493
+        ],
+        "calibration_gap": 0.38373,
+        "calibration_gap_confidence_interval_95": [
+          0.36402,
+          0.40344
+        ],
+        "top_20pct_precision": 0.19048,
+        "top_20pct_precision_confidence_interval_95": [
+          0.04762,
+          0.36842
+        ],
+        "top_20pct_prevalence_baseline": 0.2
+      },
+      "top_features_by_shap": [
+        {
+          "feature": "numeric__creative_avg_words_per_block",
+          "mean_abs_shap": 0.03111,
+          "mean_signed_shap": 0.01043
+        },
+        {
+          "feature": "numeric__creative_total_word_count",
+          "mean_abs_shap": 0.02081,
+          "mean_signed_shap": -0.00019
+        },
+        {
+          "feature": "numeric__body_length",
+          "mean_abs_shap": 0.01678,
+          "mean_signed_shap": -5e-05
+        },
+        {
+          "feature": "numeric__creative_headline_y_center",
+          "mean_abs_shap": 0.01664,
+          "mean_signed_shap": -0.00269
+        },
+        {
+          "feature": "numeric__creative_headline_x_center",
+          "mean_abs_shap": 0.01531,
+          "mean_signed_shap": -0.00253
+        },
+        {
+          "feature": "numeric__palette_vibrancy",
+          "mean_abs_shap": 0.01439,
+          "mean_signed_shap": -0.00123
+        },
+        {
+          "feature": "numeric__creative_reading_grade_level",
+          "mean_abs_shap": 0.01383,
+          "mean_signed_shap": -0.00068
+        },
+        {
+          "feature": "numeric__creative_secondary_prop_count",
+          "mean_abs_shap": 0.0126,
+          "mean_signed_shap": -0.00093
+        },
+        {
+          "feature": "numeric__publisher_count",
+          "mean_abs_shap": 0.01142,
+          "mean_signed_shap": -0.00779
+        },
+        {
+          "feature": "numeric__creative_uppercase_ratio",
+          "mean_abs_shap": 0.01121,
+          "mean_signed_shap": -0.00176
+        },
+        {
+          "feature": "numeric__creative_authority_flag_count",
+          "mean_abs_shap": 0.01063,
+          "mean_signed_shap": 0.00141
+        },
+        {
+          "feature": "numeric__title_length",
+          "mean_abs_shap": 0.01049,
+          "mean_signed_shap": -0.0009
+        },
+        {
+          "feature": "numeric__creative_total_char_count",
+          "mean_abs_shap": 0.00933,
+          "mean_signed_shap": 0.00268
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Unknown",
+          "mean_abs_shap": 0.00917,
+          "mean_signed_shap": -0.00291
+        },
+        {
+          "feature": "numeric__creative_headline_to_subtext_scale_ratio",
+          "mean_abs_shap": 0.00917,
+          "mean_signed_shap": -0.00161
+        },
+        {
+          "feature": "categorical__product_subcategory_omega-3",
+          "mean_abs_shap": 0.00857,
+          "mean_signed_shap": -0.00221
+        },
+        {
+          "feature": "numeric__creative_copy_canvas_coverage",
+          "mean_abs_shap": 0.00833,
+          "mean_signed_shap": -0.00107
+        },
+        {
+          "feature": "numeric__creative_headline_word_count",
+          "mean_abs_shap": 0.00818,
+          "mean_signed_shap": -0.00257
+        },
+        {
+          "feature": "categorical__creative_headline_zone_middle",
+          "mean_abs_shap": 0.00783,
+          "mean_signed_shap": -8e-05
+        },
+        {
+          "feature": "numeric__creative_n_blocks_bottom",
+          "mean_abs_shap": 0.00593,
+          "mean_signed_shap": 0.0007
+        },
+        {
+          "feature": "numeric__creative_copy_block_count",
+          "mean_abs_shap": 0.00518,
+          "mean_signed_shap": 0.00057
+        },
+        {
+          "feature": "numeric__psychological_warmth_index",
+          "mean_abs_shap": 0.00501,
+          "mean_signed_shap": 0.00037
+        },
+        {
+          "feature": "numeric__creative_headline_char_count",
+          "mean_abs_shap": 0.00469,
+          "mean_signed_shap": -0.002
+        },
+        {
+          "feature": "categorical__creative_primary_human_expression_N/A",
+          "mean_abs_shap": 0.0042,
+          "mean_signed_shap": -0.00095
+        },
+        {
+          "feature": "numeric__creative_question_count",
+          "mean_abs_shap": 0.00408,
+          "mean_signed_shap": 0.00068
+        },
+        {
+          "feature": "categorical__product_subcategory_multivitamin",
+          "mean_abs_shap": 0.00395,
+          "mean_signed_shap": -0.00051
+        },
+        {
+          "feature": "categorical__creative_text_alignment_left",
+          "mean_abs_shap": 0.00392,
+          "mean_signed_shap": -0.00039
+        },
+        {
+          "feature": "categorical__creative_primary_human_demographic_Young adult female",
+          "mean_abs_shap": 0.00382,
+          "mean_signed_shap": 0.00054
+        },
+        {
+          "feature": "numeric__creative_n_blocks_middle",
+          "mean_abs_shap": 0.00371,
+          "mean_signed_shap": 0.00023
+        },
+        {
+          "feature": "categorical__cta_type_learn_more",
+          "mean_abs_shap": 0.00363,
+          "mean_signed_shap": -0.0001
+        }
+      ]
+    },
+    "without_variant_boost": {
+      "weights": {
+        "longevity": 0.7777777777777778,
+        "longevity_scaling_interaction": 0.2222222222222222,
+        "variant_boost": 0.0
+      },
+      "proxy_ranking_vs_baseline": {
+        "spearman_proxy_score_rank_correlation": 0.99437,
+        "top_20pct_jaccard": 0.83206
+      },
+      "fit_duration_seconds": 1.2125,
+      "n_train": 499,
+      "n_test": 101,
+      "n_test_advertisers": 76,
+      "advertiser_overlap": 0,
+      "test_mae": 0.3956,
+      "baseline_mae": 0.415,
+      "top_20pct_precision": 0.2857,
+      "uncertainty": {
+        "method": "paired_advertiser_cluster_bootstrap",
+        "n_resamples": 2000,
+        "random_state": 42,
+        "n_clusters": 76,
+        "n_top_set_clusters": 18,
+        "mae_difference_challenger_minus_baseline": -0.01942,
+        "mae_difference_confidence_interval_95": [
+          -0.04127,
+          0.00103
+        ],
+        "calibration_gap": 0.39561,
+        "calibration_gap_confidence_interval_95": [
+          0.37487,
+          0.41654
+        ],
+        "top_20pct_precision": 0.28571,
+        "top_20pct_precision_confidence_interval_95": [
+          0.09091,
+          0.5
+        ],
+        "top_20pct_prevalence_baseline": 0.2
+      },
+      "top_features_by_shap": [
+        {
+          "feature": "numeric__creative_avg_words_per_block",
+          "mean_abs_shap": 0.02932,
+          "mean_signed_shap": 0.00948
+        },
+        {
+          "feature": "numeric__creative_total_word_count",
+          "mean_abs_shap": 0.02091,
+          "mean_signed_shap": 0.00034
+        },
+        {
+          "feature": "numeric__creative_reading_grade_level",
+          "mean_abs_shap": 0.01732,
+          "mean_signed_shap": -0.00164
+        },
+        {
+          "feature": "numeric__creative_headline_y_center",
+          "mean_abs_shap": 0.01677,
+          "mean_signed_shap": -0.00222
+        },
+        {
+          "feature": "numeric__palette_vibrancy",
+          "mean_abs_shap": 0.01641,
+          "mean_signed_shap": 0.00034
+        },
+        {
+          "feature": "numeric__publisher_count",
+          "mean_abs_shap": 0.01473,
+          "mean_signed_shap": -0.00754
+        },
+        {
+          "feature": "numeric__body_length",
+          "mean_abs_shap": 0.01412,
+          "mean_signed_shap": -0.00011
+        },
+        {
+          "feature": "numeric__creative_uppercase_ratio",
+          "mean_abs_shap": 0.01319,
+          "mean_signed_shap": -0.00273
+        },
+        {
+          "feature": "categorical__creative_headline_zone_middle",
+          "mean_abs_shap": 0.01315,
+          "mean_signed_shap": -0.00055
+        },
+        {
+          "feature": "numeric__creative_headline_x_center",
+          "mean_abs_shap": 0.01297,
+          "mean_signed_shap": -0.00088
+        },
+        {
+          "feature": "numeric__creative_total_char_count",
+          "mean_abs_shap": 0.01132,
+          "mean_signed_shap": 0.00445
+        },
+        {
+          "feature": "numeric__creative_headline_to_subtext_scale_ratio",
+          "mean_abs_shap": 0.01113,
+          "mean_signed_shap": -0.00196
+        },
+        {
+          "feature": "numeric__creative_secondary_prop_count",
+          "mean_abs_shap": 0.01083,
+          "mean_signed_shap": -0.00102
+        },
+        {
+          "feature": "numeric__creative_authority_flag_count",
+          "mean_abs_shap": 0.00957,
+          "mean_signed_shap": 0.00118
+        },
+        {
+          "feature": "numeric__creative_headline_word_count",
+          "mean_abs_shap": 0.00941,
+          "mean_signed_shap": -0.00324
+        },
+        {
+          "feature": "numeric__title_length",
+          "mean_abs_shap": 0.00836,
+          "mean_signed_shap": -0.00059
+        },
+        {
+          "feature": "categorical__creative_hook_framework_Unknown",
+          "mean_abs_shap": 0.00797,
+          "mean_signed_shap": -0.0025
+        },
+        {
+          "feature": "numeric__creative_copy_canvas_coverage",
+          "mean_abs_shap": 0.00754,
+          "mean_signed_shap": -0.0015
+        },
+        {
+          "feature": "categorical__product_subcategory_omega-3",
+          "mean_abs_shap": 0.00633,
+          "mean_signed_shap": -0.00155
+        },
+        {
+          "feature": "numeric__psychological_warmth_index",
+          "mean_abs_shap": 0.00541,
+          "mean_signed_shap": 0.0006
+        },
+        {
+          "feature": "numeric__creative_copy_block_count",
+          "mean_abs_shap": 0.0046,
+          "mean_signed_shap": -0.00021
+        },
+        {
+          "feature": "categorical__creative_text_alignment_left",
+          "mean_abs_shap": 0.00456,
+          "mean_signed_shap": -0.00045
+        },
+        {
+          "feature": "numeric__creative_question_count",
+          "mean_abs_shap": 0.00456,
+          "mean_signed_shap": 0.00093
+        },
+        {
+          "feature": "numeric__creative_n_blocks_middle",
+          "mean_abs_shap": 0.00444,
+          "mean_signed_shap": 0.00016
+        },
+        {
+          "feature": "categorical__creative_primary_human_expression_N/A",
+          "mean_abs_shap": 0.00425,
+          "mean_signed_shap": -0.00096
+        },
+        {
+          "feature": "categorical__product_subcategory_multivitamin",
+          "mean_abs_shap": 0.00389,
+          "mean_signed_shap": -0.00052
+        },
+        {
+          "feature": "numeric__creative_n_blocks_bottom",
+          "mean_abs_shap": 0.0038,
+          "mean_signed_shap": 0.00044
+        },
+        {
+          "feature": "numeric__creative_has_price",
+          "mean_abs_shap": 0.00339,
+          "mean_signed_shap": 0.00065
+        },
+        {
+          "feature": "categorical__background_style_Studio",
+          "mean_abs_shap": 0.00337,
+          "mean_signed_shap": -0.00125
+        },
+        {
+          "feature": "categorical__creative_primary_human_demographic_Young adult female",
+          "mean_abs_shap": 0.00333,
+          "mean_signed_shap": 0.00052
+        }
+      ]
+    }
+  },
+  "shap_direction_stability": [
+    {
+      "feature": "categorical__creative_headline_zone_middle",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": true,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_longevity": -1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "categorical__creative_hook_framework_Unknown",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": true,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_longevity": -1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "numeric__body_length",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": false,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_longevity": 1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "numeric__creative_authority_flag_count",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": true,
+      "directions": {
+        "baseline_70_20_10": 1,
+        "longevity_minus_10_scaling_plus_10": 1,
+        "scaling_minus_10_longevity_plus_10": 1,
+        "longevity_minus_10_variant_plus_10": 1,
+        "without_longevity": 1,
+        "without_scaling_interaction": 1,
+        "without_variant_boost": 1
+      }
+    },
+    {
+      "feature": "numeric__creative_avg_words_per_block",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": true,
+      "directions": {
+        "baseline_70_20_10": 1,
+        "longevity_minus_10_scaling_plus_10": 1,
+        "scaling_minus_10_longevity_plus_10": 1,
+        "longevity_minus_10_variant_plus_10": 1,
+        "without_longevity": 1,
+        "without_scaling_interaction": 1,
+        "without_variant_boost": 1
+      }
+    },
+    {
+      "feature": "numeric__creative_copy_canvas_coverage",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": false,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": 1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_longevity": -1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "numeric__creative_headline_to_subtext_scale_ratio",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": false,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": 1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_longevity": -1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "numeric__creative_headline_word_count",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": true,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_longevity": -1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "numeric__creative_headline_x_center",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": false,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_longevity": 1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "numeric__creative_headline_y_center",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": true,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_longevity": -1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "numeric__creative_n_blocks_bottom",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": false,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": 1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_longevity": 1,
+        "without_scaling_interaction": 1,
+        "without_variant_boost": 1
+      }
+    },
+    {
+      "feature": "numeric__creative_reading_grade_level",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": true,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_longevity": -1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "numeric__creative_secondary_prop_count",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": true,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_longevity": -1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "numeric__creative_total_char_count",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": true,
+      "directions": {
+        "baseline_70_20_10": 1,
+        "longevity_minus_10_scaling_plus_10": 1,
+        "scaling_minus_10_longevity_plus_10": 1,
+        "longevity_minus_10_variant_plus_10": 1,
+        "without_longevity": 1,
+        "without_scaling_interaction": 1,
+        "without_variant_boost": 1
+      }
+    },
+    {
+      "feature": "numeric__creative_total_word_count",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": false,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": 1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_longevity": -1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": 1
+      }
+    },
+    {
+      "feature": "numeric__creative_uppercase_ratio",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": false,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": 1,
+        "without_longevity": 1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "numeric__palette_vibrancy",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": false,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": 1,
+        "longevity_minus_10_scaling_plus_10": 1,
+        "scaling_minus_10_longevity_plus_10": 1,
+        "longevity_minus_10_variant_plus_10": 1,
+        "without_longevity": 1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": 1
+      }
+    },
+    {
+      "feature": "numeric__publisher_count",
+      "scenarios_present": 7,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": true,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_longevity": -1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "categorical__creative_primary_human_expression_N/A",
+      "scenarios_present": 6,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "without_longevity": -1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "categorical__product_subcategory_omega-3",
+      "scenarios_present": 6,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "numeric__creative_copy_block_count",
+      "scenarios_present": 6,
+      "direction_consistent_when_present": false,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": 1,
+        "longevity_minus_10_scaling_plus_10": 1,
+        "scaling_minus_10_longevity_plus_10": 1,
+        "longevity_minus_10_variant_plus_10": 1,
+        "without_scaling_interaction": 1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "numeric__psychological_warmth_index",
+      "scenarios_present": 6,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": 1,
+        "longevity_minus_10_scaling_plus_10": 1,
+        "scaling_minus_10_longevity_plus_10": 1,
+        "longevity_minus_10_variant_plus_10": 1,
+        "without_scaling_interaction": 1,
+        "without_variant_boost": 1
+      }
+    },
+    {
+      "feature": "numeric__title_length",
+      "scenarios_present": 6,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "categorical__creative_hook_framework_Social Proof",
+      "scenarios_present": 5,
+      "direction_consistent_when_present": false,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": 1,
+        "longevity_minus_10_scaling_plus_10": 1,
+        "scaling_minus_10_longevity_plus_10": 1,
+        "longevity_minus_10_variant_plus_10": 1,
+        "without_longevity": -1
+      }
+    },
+    {
+      "feature": "categorical__creative_text_alignment_left",
+      "scenarios_present": 5,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "categorical__creative_hook_framework_Testimonial",
+      "scenarios_present": 4,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "longevity_minus_10_scaling_plus_10": -1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_longevity": -1
+      }
+    },
+    {
+      "feature": "categorical__product_subcategory_multivitamin",
+      "scenarios_present": 4,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "without_scaling_interaction": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "numeric__creative_n_blocks_middle",
+      "scenarios_present": 4,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "longevity_minus_10_variant_plus_10": 1,
+        "without_longevity": 1,
+        "without_scaling_interaction": 1,
+        "without_variant_boost": 1
+      }
+    },
+    {
+      "feature": "categorical__background_style_Studio",
+      "scenarios_present": 3,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1,
+        "without_variant_boost": -1
+      }
+    },
+    {
+      "feature": "categorical__creative_primary_human_demographic_Young adult female",
+      "scenarios_present": 3,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "scaling_minus_10_longevity_plus_10": 1,
+        "without_scaling_interaction": 1,
+        "without_variant_boost": 1
+      }
+    },
+    {
+      "feature": "numeric__creative_headline_char_count",
+      "scenarios_present": 3,
+      "direction_consistent_when_present": false,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "longevity_minus_10_scaling_plus_10": 1,
+        "scaling_minus_10_longevity_plus_10": 1,
+        "without_scaling_interaction": -1
+      }
+    },
+    {
+      "feature": "numeric__creative_whitespace_ratio",
+      "scenarios_present": 3,
+      "direction_consistent_when_present": false,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": 1,
+        "longevity_minus_10_variant_plus_10": -1,
+        "without_longevity": -1
+      }
+    },
+    {
+      "feature": "categorical__creative_primary_human_expression_infrequent_sklearn",
+      "scenarios_present": 2,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "longevity_minus_10_scaling_plus_10": -1,
+        "scaling_minus_10_longevity_plus_10": -1
+      }
+    },
+    {
+      "feature": "categorical__cta_type_learn_more",
+      "scenarios_present": 2,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": -1,
+        "without_scaling_interaction": -1
+      }
+    },
+    {
+      "feature": "numeric__creative_human_presence",
+      "scenarios_present": 2,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "longevity_minus_10_variant_plus_10": 1,
+        "without_longevity": 1
+      }
+    },
+    {
+      "feature": "numeric__creative_n_blocks_top",
+      "scenarios_present": 2,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "baseline_70_20_10": 1,
+        "longevity_minus_10_variant_plus_10": 1
+      }
+    },
+    {
+      "feature": "numeric__creative_object_relationship_count",
+      "scenarios_present": 2,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "longevity_minus_10_variant_plus_10": 1,
+        "without_longevity": 1
+      }
+    },
+    {
+      "feature": "numeric__creative_question_count",
+      "scenarios_present": 2,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "without_scaling_interaction": 1,
+        "without_variant_boost": 1
+      }
+    },
+    {
+      "feature": "categorical__creative_hook_framework_Direct Offer",
+      "scenarios_present": 1,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "without_longevity": -1
+      }
+    },
+    {
+      "feature": "categorical__creative_texture_type_n/a",
+      "scenarios_present": 1,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "without_longevity": -1
+      }
+    },
+    {
+      "feature": "categorical__dominant_color_red",
+      "scenarios_present": 1,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "longevity_minus_10_variant_plus_10": 1
+      }
+    },
+    {
+      "feature": "categorical__dominant_color_white",
+      "scenarios_present": 1,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "without_longevity": 1
+      }
+    },
+    {
+      "feature": "categorical__product_subcategory_other supplements",
+      "scenarios_present": 1,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "without_longevity": -1
+      }
+    },
+    {
+      "feature": "categorical__product_subcategory_vitamins",
+      "scenarios_present": 1,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "without_longevity": -1
+      }
+    },
+    {
+      "feature": "categorical__season_positioning_none",
+      "scenarios_present": 1,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "longevity_minus_10_scaling_plus_10": 1
+      }
+    },
+    {
+      "feature": "numeric__creative_has_price",
+      "scenarios_present": 1,
+      "direction_consistent_when_present": true,
+      "stable_across_all_scenarios": false,
+      "directions": {
+        "without_variant_boost": 1
+      }
+    }
+  ],
+  "input_manifest": {
+    "matrix_path": "data/supplements_feature_matrix.json",
+    "matrix_sha256": "791308cb4fbf9f7db94294044ecc31e303a7614609b1d38dbf7acda772a42741",
+    "ads_path": "data/supplements_fresh.json",
+    "ads_sha256": "87d47947e457463f68fb5b0607b872a155bcbf43d9ae60a0c9510ccb0a9b28a2",
+    "git_commit": "b400eb61bd198c7db6dfa67f487765e62ccdc8f6",
+    "git_branch": "auto/meta-ads-model-pipeline",
+    "git_worktree_dirty": false
+  },
+  "input_eligibility": {
+    "status": "blocked",
+    "taxonomy_gate": {
+      "status": "failed",
+      "n_training_ads": 3555,
+      "sample_sha256": null,
+      "approved_labels_content_sha256": null,
+      "failures": [
+        "ad 2140497416496021 lacks an approved human taxonomy label",
+        "ad 2140497416496021 lacks taxonomy sample provenance",
+        "ad 2140497416496021 has incomplete reviewer provenance",
+        "ad 2140497416496021 lacks approved-label content provenance",
+        "ad 1929541504431807 lacks an approved human taxonomy label",
+        "ad 1929541504431807 lacks taxonomy sample provenance",
+        "ad 1929541504431807 has incomplete reviewer provenance",
+        "ad 1929541504431807 lacks approved-label content provenance",
+        "ad 1923645134954720 lacks an approved human taxonomy label",
+        "ad 1923645134954720 lacks taxonomy sample provenance",
+        "ad 1923645134954720 has incomplete reviewer provenance",
+        "ad 1923645134954720 lacks approved-label content provenance",
+        "ad 872475149039448 lacks an approved human taxonomy label",
+        "ad 872475149039448 lacks taxonomy sample provenance",
+        "ad 872475149039448 has incomplete reviewer provenance",
+        "ad 872475149039448 lacks approved-label content provenance",
+        "ad 931903469425876 lacks an approved human taxonomy label",
+        "ad 931903469425876 lacks taxonomy sample provenance",
+        "ad 931903469425876 has incomplete reviewer provenance",
+        "ad 931903469425876 lacks approved-label content provenance",
+        "ad 27390064590677683 lacks an approved human taxonomy label",
+        "ad 27390064590677683 lacks taxonomy sample provenance",
+        "ad 27390064590677683 has incomplete reviewer provenance",
+        "ad 27390064590677683 lacks approved-label content provenance",
+        "ad 938607302569836 lacks an approved human taxonomy label",
+        "ad 938607302569836 lacks taxonomy sample provenance",
+        "ad 938607302569836 has incomplete reviewer provenance",
+        "ad 938607302569836 lacks approved-label content provenance",
+        "ad 880104018170915 lacks an approved human taxonomy label",
+        "ad 880104018170915 lacks taxonomy sample provenance",
+        "ad 880104018170915 has incomplete reviewer provenance",
+        "ad 880104018170915 lacks approved-label content provenance",
+        "ad 1062255832929798 lacks an approved human taxonomy label",
+        "ad 1062255832929798 lacks taxonomy sample provenance",
+        "ad 1062255832929798 has incomplete reviewer provenance",
+        "ad 1062255832929798 lacks approved-label content provenance",
+        "ad 1003959555556584 lacks an approved human taxonomy label",
+        "ad 1003959555556584 lacks taxonomy sample provenance",
+        "ad 1003959555556584 has incomplete reviewer provenance",
+        "ad 1003959555556584 lacks approved-label content provenance",
+        "ad 1030864056331221 lacks an approved human taxonomy label",
+        "ad 1030864056331221 lacks taxonomy sample provenance",
+        "ad 1030864056331221 has incomplete reviewer provenance",
+        "ad 1030864056331221 lacks approved-label content provenance",
+        "ad 2500770057043516 lacks an approved human taxonomy label",
+        "ad 2500770057043516 lacks taxonomy sample provenance",
+        "ad 2500770057043516 has incomplete reviewer provenance",
+        "ad 2500770057043516 lacks approved-label content provenance",
+        "ad 1507887230933843 lacks an approved human taxonomy label",
+        "ad 1507887230933843 lacks taxonomy sample provenance",
+        "ad 1507887230933843 has incomplete reviewer provenance",
+        "ad 1507887230933843 lacks approved-label content provenance",
+        "ad 1385860630102077 lacks an approved human taxonomy label",
+        "ad 1385860630102077 lacks taxonomy sample provenance",
+        "ad 1385860630102077 has incomplete reviewer provenance",
+        "ad 1385860630102077 lacks approved-label content provenance",
+        "ad 1349466857396461 lacks an approved human taxonomy label",
+        "ad 1349466857396461 lacks taxonomy sample provenance",
+        "ad 1349466857396461 has incomplete reviewer provenance",
+        "ad 1349466857396461 lacks approved-label content provenance",
+        "ad 24910835795277652 lacks an approved human taxonomy label",
+        "ad 24910835795277652 lacks taxonomy sample provenance",
+        "ad 24910835795277652 has incomplete reviewer provenance",
+        "ad 24910835795277652 lacks approved-label content provenance",
+        "ad 997055592107433 lacks an approved human taxonomy label",
+        "ad 997055592107433 lacks taxonomy sample provenance",
+        "ad 997055592107433 has incomplete reviewer provenance",
+        "ad 997055592107433 lacks approved-label content provenance",
+        "ad 882656781099905 lacks an approved human taxonomy label",
+        "ad 882656781099905 lacks taxonomy sample provenance",
+        "ad 882656781099905 has incomplete reviewer provenance",
+        "ad 882656781099905 lacks approved-label content provenance",
+        "ad 1198251504954298 lacks an approved human taxonomy label",
+        "ad 1198251504954298 lacks taxonomy sample provenance",
+        "ad 1198251504954298 has incomplete reviewer provenance",
+        "ad 1198251504954298 lacks approved-label content provenance",
+        "ad 2052354378679944 lacks an approved human taxonomy label",
+        "ad 2052354378679944 lacks taxonomy sample provenance",
+        "ad 2052354378679944 has incomplete reviewer provenance",
+        "ad 2052354378679944 lacks approved-label content provenance",
+        "ad 994666943144610 lacks an approved human taxonomy label",
+        "ad 994666943144610 lacks taxonomy sample provenance",
+        "ad 994666943144610 has incomplete reviewer provenance",
+        "ad 994666943144610 lacks approved-label content provenance",
+        "ad 830363183474173 lacks an approved human taxonomy label",
+        "ad 830363183474173 lacks taxonomy sample provenance",
+        "ad 830363183474173 has incomplete reviewer provenance",
+        "ad 830363183474173 lacks approved-label content provenance",
+        "ad 889979753771002 lacks an approved human taxonomy label",
+        "ad 889979753771002 lacks taxonomy sample provenance",
+        "ad 889979753771002 has incomplete reviewer provenance",
+        "ad 889979753771002 lacks approved-label content provenance",
+        "ad 1501177885118325 lacks an approved human taxonomy label",
+        "ad 1501177885118325 lacks taxonomy sample provenance",
+        "ad 1501177885118325 has incomplete reviewer provenance",
+        "ad 1501177885118325 lacks approved-label content provenance",
+        "ad 1678964769857563 lacks an approved human taxonomy label",
+        "ad 1678964769857563 lacks taxonomy sample provenance",
+        "ad 1678964769857563 has incomplete reviewer provenance",
+        "ad 1678964769857563 lacks approved-label content provenance"
+      ]
+    },
+    "product_enrichment_gate": {
+      "report_schema_version": "product-enrichment-coverage-v1",
+      "status": "failed",
+      "policy": {
+        "minimum_linked_coverage": {
+          "product_page": 0.5,
+          "price": 0.4,
+          "description": 0.25
+        },
+        "minimum_feature_rows": 100,
+        "minimum_feature_advertisers": 10
+      },
+      "ads_content_sha256": "3922fee4b5e975a731af4e66db02291726e969be3df77170d7f300f291d20dd4",
+      "n_ads": 3555,
+      "n_linked_ads": 3510,
+      "n_unique_link_urls": 1671,
+      "fields": {
+        "product_page": {
+          "n_rows": 0,
+          "n_advertisers": 0,
+          "linked_ad_coverage": 0.0,
+          "model_support": false
+        },
+        "price": {
+          "n_rows": 0,
+          "n_advertisers": 0,
+          "linked_ad_coverage": 0.0,
+          "model_support": false
+        },
+        "description": {
+          "n_rows": 0,
+          "n_advertisers": 0,
+          "linked_ad_coverage": 0.0,
+          "model_support": false
+        },
+        "rating": {
+          "n_rows": 0,
+          "n_advertisers": 0,
+          "linked_ad_coverage": 0.0,
+          "model_support": false
+        },
+        "rating_count": {
+          "n_rows": 0,
+          "n_advertisers": 0,
+          "linked_ad_coverage": 0.0,
+          "model_support": false
+        },
+        "variants": {
+          "n_rows": 0,
+          "n_advertisers": 0,
+          "linked_ad_coverage": 0.0,
+          "model_support": false
+        }
+      },
+      "extraction_methods": {
+        "missing": 3510
+      },
+      "failures": [
+        "product_page coverage 0.000 is below fixed 0.500 (0/1755 required rows)",
+        "price coverage 0.000 is below fixed 0.400 (0/1404 required rows)",
+        "description coverage 0.000 is below fixed 0.250 (0/878 required rows)"
+      ]
+    },
+    "interpretation": "Sensitivity results from blocked inputs are diagnostic only and cannot support promotion or a new handoff."
+  }
+}

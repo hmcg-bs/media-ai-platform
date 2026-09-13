@@ -524,3 +524,41 @@ remains blocked on rights and craft approval.
   unless their field-specific row/advertiser support passes. Frozen v3 has no product gate and is
   unchanged. No v4 handoff or model-performance claim exists until human taxonomy labels, a real
   enrichment run, and untouched temporal evaluation exist.
+
+### Uncertainty and proxy sensitivity implementation (2026-09-13)
+
+- New model and frozen-future-window evaluations now resample whole advertisers rather than rows
+  when estimating MAE-difference, calibration-gap, and fixed top-20% precision intervals. Reports
+  identify `paired_advertiser_cluster_bootstrap`, advertiser count, and top-set advertiser count.
+  The objective promotion policy fails closed unless this method is present and its cluster count
+  equals the reported holdout-advertiser count.
+- `pipeline.model_training.proxy_sensitivity` runs seven pre-registered 70/20/10 perturbation and
+  leave-one-ingredient-out scenarios on one fixed advertiser-temporal split. It records input byte
+  hashes, Git provenance, per-scenario clustered uncertainty, proxy-rank agreement, top-set Jaccard,
+  runtime, Tree-SHAP rankings, and cross-scenario sign stability. It is explicitly analysis-only:
+  it cannot select weights, emit guidance, or change immutable v3.
+- Reproduce after the current human taxonomy and product-enrichment gates pass:
+
+  ```bash
+  uv run python -m pipeline.model_training.proxy_sensitivity \
+    --matrix data/supplements_feature_matrix.json \
+    --ads data/supplements_taxonomy_approved_product_enriched.json \
+    --out data/supplements_proxy_sensitivity_v1.json \
+    --workers-per-model 1
+  ```
+
+- A diagnostic run against the existing pre-taxonomy matrix is retained only to validate the
+  harness and quantify why promotion remains blocked. Its `input_eligibility.status` is `blocked`;
+  it is not new model evidence. The current 120-ad taxonomy artifact is still blank, so the workflow
+  correctly stops before any full-corpus paid ZenRows run. Once humans complete adjudication, the
+  existing restartable free-first/ZenRows cascade is the next sequential step; coverage and field
+  support must then pass before model training or BigQuery persistence.
+- The immutable diagnostic output is
+  `docs/artifacts/supplements_proxy_sensitivity_pre_taxonomy_v1.json` (SHA-256
+  `2b5f8d9da35e4157b5d30417b6192464528ecc2df2e5d981237e17df8da28257`). It binds matrix
+  SHA-256 `791308cb4fbf9f7db94294044ecc31e303a7614609b1d38dbf7acda772a42741` and ads
+  SHA-256 `87d47947e457463f68fb5b0607b872a155bcbf43d9ae60a0c9510ccb0a9b28a2` to clean
+  commit `b400eb61bd198c7db6dfa67f487765e62ccdc8f6`. Under clustered uncertainty, the
+  baseline scenario has MAE 0.3509 versus 0.3731, but top-20% precision is only 0.1905 with
+  95% interval [0.0500, 0.34783]; thus ranking promotion fails. This result is diagnostic because
+  both taxonomy and product-enrichment eligibility are failed, not a replacement for v3 evidence.

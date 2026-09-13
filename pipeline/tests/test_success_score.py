@@ -40,6 +40,28 @@ def _synthetic_rows(n: int) -> list[dict]:
 
 
 class TestComputeCompositeSuccessScore:
+    def test_custom_weights_are_explicit_and_must_form_a_simplex(self):
+        rows = [
+            {"days_active": 1, "brand_scaling_count": 1, "collation_count": 1},
+            {"days_active": 2, "brand_scaling_count": 2, "collation_count": 2},
+        ]
+        scored = SuccessScoreCalibrator(
+            rows,
+            {
+                "longevity": 0.0,
+                "longevity_scaling_interaction": 0.0,
+                "variant_boost": 1.0,
+            },
+        ).transform(rows)
+        assert scored[1]["composite_success_score"] == 1.0
+
+        try:
+            SuccessScoreCalibrator(rows, {"longevity": 1.0})
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("partial weight configurations must fail closed")
+
     def test_external_rows_do_not_change_training_calibration(self):
         train = [
             {"days_active": 10, "brand_scaling_count": 1, "collation_count": 1},

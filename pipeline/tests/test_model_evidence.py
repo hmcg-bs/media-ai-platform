@@ -28,6 +28,34 @@ def test_bootstrap_is_reproducible_for_same_seed():
     assert first == second
 
 
+def test_cluster_bootstrap_resamples_whole_asymmetric_advertisers():
+    actual = np.zeros(9)
+    predicted = np.array([1.0] * 8 + [-1.0])
+    groups = np.array(["large"] * 8 + ["small"])
+    row = bootstrap_prediction_evidence(actual, predicted, 0.0, 9, n_resamples=500)
+    clustered = bootstrap_prediction_evidence(
+        actual, predicted, 0.0, 9, n_resamples=500, groups=groups
+    )
+    assert clustered["method"] == "paired_advertiser_cluster_bootstrap"
+    assert clustered["n_clusters"] == 2
+    assert (
+        clustered["calibration_gap_confidence_interval_95"][0]
+        < row["calibration_gap_confidence_interval_95"][0]
+    )
+
+
+def test_cluster_bootstrap_rejects_invalid_group_assignments():
+    actual = np.array([0.0, 1.0])
+    predicted = np.array([0.1, 0.9])
+    for groups in (np.array(["only-one"]), np.array(["valid", ""])):
+        try:
+            bootstrap_prediction_evidence(actual, predicted, 0.5, 7, groups=groups)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("invalid groups must fail closed")
+
+
 def test_drift_report_surfaces_changed_numeric_and_categorical_features():
     train = [{"ad_id": str(i), "page_id": "old", "numeric": i, "category": "a"} for i in range(20)]
     test = [
@@ -49,6 +77,8 @@ def test_promotion_fails_closed_when_taxonomy_or_confidence_is_missing():
         "test_mae": 0.3,
         "baseline_mae": 0.4,
         "uncertainty": {
+            "method": "paired_advertiser_cluster_bootstrap",
+            "n_clusters": 10,
             "mae_difference_confidence_interval_95": [-0.2, -0.01],
             "top_20pct_precision_confidence_interval_95": [0.25, 0.5],
         },
@@ -71,6 +101,8 @@ def test_promotion_passes_only_when_every_objective_gate_passes():
         "test_mae": 0.3,
         "baseline_mae": 0.4,
         "uncertainty": {
+            "method": "paired_advertiser_cluster_bootstrap",
+            "n_clusters": 10,
             "mae_difference_confidence_interval_95": [-0.2, -0.01],
             "top_20pct_precision_confidence_interval_95": [0.25, 0.5],
         },
@@ -93,6 +125,8 @@ def test_promotion_blocks_when_product_enrichment_is_unverified():
         "test_mae": 0.3,
         "baseline_mae": 0.4,
         "uncertainty": {
+            "method": "paired_advertiser_cluster_bootstrap",
+            "n_clusters": 10,
             "mae_difference_confidence_interval_95": [-0.2, -0.01],
             "top_20pct_precision_confidence_interval_95": [0.25, 0.5],
         },

@@ -34,21 +34,44 @@ def bootstrap_prediction_evidence(
     baseline_prediction: float,
     random_state: int,
     n_resamples: int = BOOTSTRAP_RESAMPLES,
+    groups: np.ndarray | None = None,
 ) -> dict[str, Any]:
     """Paired MAE/calibration intervals and ranking-hit uncertainty.
 
     Ranking precision is a property of the fixed predicted top-k set. Its
     interval bootstraps the hit indicators within that set instead of
     repeatedly redefining "top" on duplicated bootstrap rows.
+
+    When advertiser ``groups`` are supplied, whole advertisers are sampled
+    with replacement. This preserves within-advertiser dependence instead of
+    pretending repeated creatives from one advertiser are independent rows.
     """
     if len(actual) != len(predicted) or not len(actual):
         raise ValueError("actual and predicted must have the same non-zero length")
+    if n_resamples < 1:
+        raise ValueError("n_resamples must be positive")
+    group_array: np.ndarray | None = None
+    group_indices: list[np.ndarray] | None = None
+    unique_groups: np.ndarray | None = None
+    if groups is not None:
+        group_array = np.asarray(groups, dtype=object)
+        if len(group_array) != len(actual):
+            raise ValueError("groups must have the same length as actual and predicted")
+        if any(group is None or str(group).strip() == "" for group in group_array):
+            raise ValueError("groups must not contain missing or blank values")
+        group_array = group_array.astype(str)
+        unique_groups = np.unique(group_array)
+        group_indices = [np.flatnonzero(group_array == group) for group in unique_groups]
     rng = np.random.default_rng(random_state)
     n = len(actual)
     mae_differences: list[float] = []
     calibration_gaps: list[float] = []
     for _ in range(n_resamples):
-        indices = rng.integers(0, n, size=n)
+        if group_indices is None:
+            indices = rng.integers(0, n, size=n)
+        else:
+            sampled_groups = rng.integers(0, len(group_indices), size=len(group_indices))
+            indices = np.concatenate([group_indices[index] for index in sampled_groups])
         sampled_actual = actual[indices]
         sampled_predicted = predicted[indices]
         model_mae = np.mean(np.abs(sampled_actual - sampled_predicted))
@@ -60,13 +83,33 @@ def bootstrap_prediction_evidence(
     actual_top = set(np.argsort(actual)[-k:])
     predicted_top = np.argsort(predicted)[-k:]
     hit_values = np.array([int(index in actual_top) for index in predicted_top])
-    precision_samples = [
-        float(rng.choice(hit_values, size=k, replace=True).mean()) for _ in range(n_resamples)
-    ]
+    if group_array is None:
+        precision_samples = [
+            float(rng.choice(hit_values, size=k, replace=True).mean()) for _ in range(n_resamples)
+        ]
+        top_group_count = None
+    else:
+        top_groups = group_array[predicted_top]
+        unique_top_groups = np.unique(top_groups)
+        top_group_hits = [hit_values[top_groups == group] for group in unique_top_groups]
+        precision_samples = []
+        for _ in range(n_resamples):
+            sampled_groups = rng.integers(
+                0, len(top_group_hits), size=len(top_group_hits)
+            )
+            sampled_hits = np.concatenate([top_group_hits[index] for index in sampled_groups])
+            precision_samples.append(float(sampled_hits.mean()))
+        top_group_count = len(unique_top_groups)
     return {
-        "method": "paired_nonparametric_bootstrap",
+        "method": (
+            "paired_advertiser_cluster_bootstrap"
+            if group_array is not None
+            else "paired_nonparametric_bootstrap"
+        ),
         "n_resamples": n_resamples,
         "random_state": random_state,
+        "n_clusters": len(unique_groups) if unique_groups is not None else None,
+        "n_top_set_clusters": top_group_count,
         "mae_difference_challenger_minus_baseline": round(
             float(
                 np.mean(np.abs(actual - predicted)) - np.mean(np.abs(actual - baseline_prediction))
@@ -181,6 +224,10 @@ def build_promotion_decision(
         "advertiser_overlap_zero": without_embeddings.get("advertiser_overlap") == 0,
         "holdout_rows_at_least_100": without_embeddings.get("n_test", 0) >= 100,
         "holdout_advertisers_at_least_10": (without_embeddings.get("n_test_advertisers", 0) >= 10),
+        "uncertainty_is_advertiser_clustered": (
+            uncertainty.get("method") == "paired_advertiser_cluster_bootstrap"
+            and uncertainty.get("n_clusters") == without_embeddings.get("n_test_advertisers")
+        ),
         "mae_point_better_than_baseline": (
             without_embeddings.get("test_mae", float("inf"))
             < without_embeddings.get("baseline_mae", float("-inf"))

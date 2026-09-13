@@ -15,6 +15,8 @@ brand's repeated creative and landing-page conventions across the boundary.
 
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
@@ -41,6 +43,17 @@ _SCORE_WEIGHTS = {
     "variant_boost": 0.10,
 }
 
+
+def _validated_score_weights(weights: Mapping[str, float] | None) -> dict[str, float]:
+    resolved = dict(_SCORE_WEIGHTS if weights is None else weights)
+    if set(resolved) != set(_SCORE_WEIGHTS):
+        raise ValueError(f"score weights must have exactly these keys: {sorted(_SCORE_WEIGHTS)}")
+    if any(not math.isfinite(value) or value < 0 for value in resolved.values()):
+        raise ValueError("score weights must be finite and non-negative")
+    if not math.isclose(sum(resolved.values()), 1.0, abs_tol=1e-9):
+        raise ValueError("score weights must sum to 1")
+    return resolved
+
 _DEFAULT_PARAMETER_GRID = (
     {"n_estimators": 200, "max_depth": 3, "learning_rate": 0.05, "min_child_weight": 1},
     {"n_estimators": 400, "max_depth": 3, "learning_rate": 0.03, "min_child_weight": 3},
@@ -52,8 +65,13 @@ _DEFAULT_PARAMETER_GRID = (
 class SuccessScoreCalibrator:
     """Training-only empirical distributions used to rank proxy ingredients."""
 
-    def __init__(self, rows: list[dict[str, Any]]):
+    def __init__(
+        self,
+        rows: list[dict[str, Any]],
+        weights: Mapping[str, float] | None = None,
+    ):
         frame = pd.DataFrame(rows)
+        self.weights = _validated_score_weights(weights)
 
         def values(name: str, default: float) -> pd.Series:
             source = frame[name] if name in frame else pd.Series(default, index=frame.index)
@@ -87,9 +105,9 @@ class SuccessScoreCalibrator:
         scaling_rank = self._percentile("brand_scaling_count", scaling)
         variant_rank = self._percentile("collation_count", variants)
         df["composite_success_score"] = (
-            _SCORE_WEIGHTS["longevity"] * longevity_rank
-            + _SCORE_WEIGHTS["longevity_scaling_interaction"] * longevity_rank * scaling_rank
-            + _SCORE_WEIGHTS["variant_boost"] * variant_rank
+            self.weights["longevity"] * longevity_rank
+            + self.weights["longevity_scaling_interaction"] * longevity_rank * scaling_rank
+            + self.weights["variant_boost"] * variant_rank
         )
         return df.to_dict("records")
 
@@ -138,6 +156,7 @@ def train_and_explain(
     n_jobs: int = 1,
     start_dates: dict[str, str] | None = None,
     parameter_grid: tuple[dict[str, Any], ...] = _DEFAULT_PARAMETER_GRID,
+    score_weights: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     if start_dates:
         train_rows, test_rows, split = temporal_advertiser_split(rows, start_dates)
@@ -161,7 +180,8 @@ def train_and_explain(
 
     # Fit score percentiles on training only. Test labels cannot influence
     # either label calibration, preprocessing, parameter choice, or fitting.
-    calibrator = SuccessScoreCalibrator(train_rows)
+    resolved_score_weights = _validated_score_weights(score_weights)
+    calibrator = SuccessScoreCalibrator(train_rows, resolved_score_weights)
     scored_train = calibrator.transform(train_rows)
     scored_test = calibrator.transform(test_rows)
     X_train, y_train = build_xy_composite(scored_train, include_embeddings=include_embeddings)
@@ -174,7 +194,7 @@ def train_and_explain(
     else:
         cut = max(1, int(len(train_rows) * 0.8))
         tune_train_rows, validation_rows = train_rows[:cut], train_rows[cut:]
-    tune_calibrator = SuccessScoreCalibrator(tune_train_rows)
+    tune_calibrator = SuccessScoreCalibrator(tune_train_rows, resolved_score_weights)
     tune_scored = tune_calibrator.transform(tune_train_rows)
     validation_scored = tune_calibrator.transform(validation_rows)
     X_tune, y_tune = build_xy_composite(tune_scored, include_embeddings=include_embeddings)
@@ -238,8 +258,11 @@ def train_and_explain(
 
     ranking = sorted(zip(feature_names, mean_abs_shap, mean_signed_shap), key=lambda t: -t[1])
 
+    test_group_sequence = np.array(
+        [str(row.get("page_id") or f"__ad__{row['ad_id']}") for row in test_rows]
+    )
     train_groups = {str(r.get("page_id") or f"__ad__{r['ad_id']}") for r in train_rows}
-    test_groups = {str(r.get("page_id") or f"__ad__{r['ad_id']}") for r in test_rows}
+    test_groups = set(test_group_sequence)
     return {
         "n_rows": len(rows),
         "n_train": len(X_train),
@@ -255,6 +278,7 @@ def train_and_explain(
             test_pred,
             baseline_prediction,
             random_state=random_state,
+            groups=test_group_sequence,
         ),
         "feature_drift": feature_drift_report(train_rows, test_rows),
         "split_strategy": split_strategy,
@@ -264,6 +288,7 @@ def train_and_explain(
         "best_parameters": best_params,
         "tuning_results": tuning_results,
         "label_calibration": "training_only_empirical_percentiles",
+        "score_weights": resolved_score_weights,
         "segment_evaluation": segment_metrics(
             test_rows, y_test_arr, test_pred, start_dates or {}, minimum_size=10
         ),
@@ -316,14 +341,18 @@ def fit_and_score_future_window(
     actual = y_future.to_numpy()
     predicted = model.predict(X_future_t)
     baseline_prediction = float(np.median(y_train))
+    future_group_sequence = np.array(
+        [str(row.get("page_id") or f"__ad__{row.get('ad_id')}") for row in future_rows]
+    )
     uncertainty = bootstrap_prediction_evidence(
         actual,
         predicted,
         baseline_prediction,
         random_state=random_state,
+        groups=future_group_sequence,
     )
     train_groups = {str(row.get("page_id") or f"__ad__{row.get('ad_id')}") for row in training_rows}
-    future_groups = {str(row.get("page_id") or f"__ad__{row.get('ad_id')}") for row in future_rows}
+    future_groups = set(future_group_sequence)
     return {
         "n_train": len(training_rows),
         "n_test": len(future_rows),
