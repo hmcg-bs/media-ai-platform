@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
+from urllib.parse import urlencode
 
 from tenacity import (
     retry,
@@ -90,13 +91,18 @@ class ApifyClient:
         actor_id = actor_id or settings.apify_actor_id
 
         # Construct Ad Library search URL with the search query
-        ad_library_url = (
-            "https://www.facebook.com/ads/library/"
-            f"?active_status=active&ad_type=all&country={country}"
-            f"&is_targeted_country=false&media_type=all&q={search_query}"
-            "&search_type=keyword_unordered"
-            "&sort_data[direction]=desc&sort_data[mode]=total_impressions"
-        )
+        query = urlencode({
+            "active_status": "active",
+            "ad_type": "all",
+            "country": country.upper(),
+            "is_targeted_country": "false",
+            "media_type": "all",
+            "q": search_query,
+            "search_type": "keyword_unordered",
+            "sort_data[direction]": "desc",
+            "sort_data[mode]": "total_impressions",
+        })
+        ad_library_url = f"https://www.facebook.com/ads/library/?{query}"
 
         input_dict = {
             "urls": [{"url": ad_library_url}],

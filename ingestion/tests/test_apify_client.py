@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ingestion.apify_client import run_ad_scrape
+from ingestion.apify_client import ApifyClient, run_ad_scrape
 
 
 class TestRunAdScrape:
@@ -114,3 +114,40 @@ class TestRunAdScrape:
         )
 
         assert captured_args["country"] == "US"
+
+
+def test_actor_url_encodes_query_and_country() -> None:
+    captured: dict = {}
+
+    class FakeRun:
+        status = "SUCCEEDED"
+        default_dataset_id = "dataset-1"
+
+    class FakeActor:
+        def call(self, run_input, timeout):
+            captured["input"] = run_input
+            return FakeRun()
+
+    class FakeDataset:
+        def list_items(self):
+            return type("Page", (), {"items": []})()
+
+    class FakeSdk:
+        def actor(self, actor_id):
+            return FakeActor()
+
+        def dataset(self, dataset_id):
+            return FakeDataset()
+
+    client = ApifyClient(api_token="not-real")
+    client._client = FakeSdk()
+    client.run_ad_scrape(
+        search_query="protein powder & vitamins",
+        count=10,
+        actor_id="fake/actor",
+        country="sg",
+    )
+
+    url = captured["input"]["urls"][0]["url"]
+    assert "q=protein+powder+%26+vitamins" in url
+    assert "country=SG" in url

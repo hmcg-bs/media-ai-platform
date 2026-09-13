@@ -5,7 +5,9 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from ingestion.fresh_corpus_scrape import scrape_and_normalize
+import pytest
+
+from ingestion.fresh_corpus_scrape import scrape_and_normalize, validate_resume_state
 
 
 def _raw_item(ad_id: str, with_image: bool = True) -> dict:
@@ -28,6 +30,15 @@ def _raw_item(ad_id: str, with_image: bool = True) -> dict:
 
 
 class TestScrapeAndNormalize:
+    class FakeClient:
+        def __init__(self, rows_by_query):
+            self.rows_by_query = rows_by_query
+            self.calls = []
+
+        def run_ad_scrape(self, search_query, count, actor_id=None, country="US"):
+            self.calls.append(search_query)
+            return self.rows_by_query[search_query]
+
     def test_dedupes_across_queries_by_ad_archive_id(self):
         def fake_run_ad_scrape(self, search_query, count, actor_id=None, country="US"):
             return [_raw_item("1"), _raw_item("2")]
@@ -76,3 +87,30 @@ class TestScrapeAndNormalize:
                 raise AssertionError("expected ValueError")
             except ValueError:
                 pass
+
+    def test_resume_skips_completed_queries_and_checkpoints_each_success(self):
+        client = self.FakeClient({
+            "already-done": [_raw_item("duplicate")],
+            "new": [_raw_item("2")],
+        })
+        completed = {"already-done"}
+        checkpoints = []
+
+        ads = scrape_and_normalize(
+            queries=("already-done", "new"),
+            count_per_query=10,
+            client=client,
+            existing_ads=[{"ad_archive_id": "1", "image_urls": ["existing.jpg"]}],
+            completed_queries=completed,
+            checkpoint=lambda rows, done: checkpoints.append((list(rows), set(done))),
+        )
+
+        assert client.calls == ["new"]
+        assert {ad["ad_archive_id"] for ad in ads} == {"1", "2"}
+        assert checkpoints[-1][1] == {"already-done", "new"}
+
+
+def test_resume_rejects_a_different_corpus_definition():
+    state = {"queries": ["vitamins"], "count_per_query": 100, "country": "US"}
+    with pytest.raises(ValueError, match="queries, count_per_query, country"):
+        validate_resume_state(state, ("protein",), 200, "SG")
