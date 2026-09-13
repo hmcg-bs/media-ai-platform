@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Capacity-safe no-embedding evaluation mode
 - Keyless Amp OIDC → Google Workload Identity Federation authentication for orbs
 - Atomic, idempotent external-account ADC lifecycle generation and contract tests
+- Append-only BigQuery ad, feature, lifecycle, and survival-report persistence
+- Conservative Apify page-inventory polling with exact-ID and positive-control evidence
+- 30/60/90/180-day Kaplan–Meier validation with explicit evidence gates
+- Fail-closed manual Supplements taxonomy and quality-reference approval workflows
+- Content-addressed max-1600 WebP archive storage and immutable manifests
 
 ### Changed
 - Aligned the competitor-ad Performance proxy to Longevity weighted by page-level Scaling with a Meta collation Variant boost
@@ -35,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Generation guidance now excludes pooled rare-category levels
 - Validated keyless WIF against live Cloud Vision and backfilled OCR for the
   complete seeded 600-ad Supplements sample
+- Model reports now embed schema, implementation hash, and clean Git provenance
+- Successful-ad references are capped at eight and restricted to six-dimension craft comparison
 
 ### Fixed
 - Prevented same-advertiser train/test leakage and same-output concurrent job corruption
@@ -42,6 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sent Replicate the required nested Pydantic schema and added targeted repair for incomplete cognitive artifacts
 - Honored Replicate low-credit rate-limit reset hints and kept seeded sample resumes exact
 - Corrected the documented WIF provider to the deployed `amp-provider` resource
+- Prevented actor status/error rows, result caps, and empty page polls from becoming false ad stops
+- Excluded `N/A` cognitive defaults from generation guidance
+- Corrected Apify active-ad `end_date` boundaries so only explicit inactive status counts as a
+  Longevity event; sparse-event Cox fitting now fails closed
+- Sized BigQuery streaming batches by bytes and supported bucket-scoped Object Admin without
+  requiring bucket metadata access
 
 ### Removed
 - Target-derived cluster trend features from the default training CLI because their in-sample encoding leaked outcomes

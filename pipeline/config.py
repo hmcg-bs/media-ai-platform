@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     gcp_project_id: str = ""
     gcp_region: str = "us-central1"
     vertex_location: str = "us-central1"
+    bigquery_dataset: str = "ad_intelligence"
+    gcs_ad_bucket: str = ""
     # Path to a service-account key JSON file. When set, GenAIClient
     # authenticates with it explicitly instead of falling back to user ADC
     # (`gcloud auth application-default login`) -- service accounts aren't
@@ -56,7 +58,7 @@ class Settings(BaseSettings):
 
     # ─── Layered colour + VLM imagery + embeddings (ADR-008) ──────────
     # Prototyped on Replicate now, behind swappable clients; Vertex is the target.
-    model_provider: str = "replicate"           # replicate | (future) vertex
+    model_provider: str = "replicate"  # replicate | (future) vertex
     replicate_api_token: str = ""
     # Official models run by name; community models need a pinned :version.
     qwen_layers_model: str = "qwen/qwen-image-layered"
@@ -70,7 +72,7 @@ class Settings(BaseSettings):
     )
     qwen_num_layers: int = 4
     embedding_dim: int = 768
-    replicate_timeout_s: int = 300   # generous: community models cold-start slowly
+    replicate_timeout_s: int = 300  # generous: community models cold-start slowly
     # Step 1 ingestion — Apify Meta Ad Library scraper.
     apify_api_token: str = ""
     apify_actor_id: str = "curious_coder/facebook-ads-library-scraper"
@@ -117,9 +119,9 @@ class Settings(BaseSettings):
     enable_datalab_copy: bool = False  # replace Cloud Vision OCR with Datalab copy
 
     # Optional paid stages — default OFF so a plain orchestrator run stays offline/cheap.
-    enable_layer_color: bool = False   # Qwen layers → background ColorProfile
-    enable_imagery: bool = False       # Qwen3-VL → imagery_description
-    enable_embeddings: bool = False    # embedding-gemma → <ad_id>.embeddings.json
+    enable_layer_color: bool = False  # Qwen layers → background ColorProfile
+    enable_imagery: bool = False  # Qwen3-VL → imagery_description
+    enable_embeddings: bool = False  # embedding-gemma → <ad_id>.embeddings.json
     imagery_prompt: str = (
         "Describe the product and visual imagery in this advertisement — the objects, "
         "people, setting, and style. Do NOT transcribe or list the on-screen text."
@@ -127,8 +129,8 @@ class Settings(BaseSettings):
 
     # ─── Deterministic vision params ──────────────────────────────────
     kmeans_clusters: int = 3
-    kmeans_perimeter_pct: float = 0.10          # outermost 10% = background sample
-    max_image_dimension_px: int = 1024          # resize longest edge before Vertex
+    kmeans_perimeter_pct: float = 0.10  # outermost 10% = background sample
+    max_image_dimension_px: int = 1024  # resize longest edge before Vertex
 
     # ─── Retry / timeouts ─────────────────────────────────────────────
     api_max_attempts: int = 3

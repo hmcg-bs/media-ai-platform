@@ -54,6 +54,14 @@ def identify_scrape_dates(
     }
 
 
+def is_event_observed(ad: dict[str, Any], scrape_dates: set[str]) -> bool:
+    """Use explicit activity status; retain date heuristic for legacy corpora."""
+    if ad.get("is_active") is not None:
+        return ad.get("is_active") is False
+    end_date = ad.get("end_date")
+    return bool(end_date) and end_date not in scrape_dates
+
+
 def build_survival_frame(
     rows: list[dict[str, Any]],
     ads: list[dict[str, Any]],
@@ -69,16 +77,16 @@ def build_survival_frame(
     "still active", not missing evidence to discard."""
     if scrape_dates is None:
         scrape_dates = identify_scrape_dates(ads)
-    end_date_by_id = {a["ad_archive_id"]: a.get("end_date") for a in ads}
+    ads_by_id = {a["ad_archive_id"]: a for a in ads}
 
     records = []
     for row in rows:
-        end_date = end_date_by_id.get(row.get("ad_id"))
-        if row.get("ad_id") not in end_date_by_id:
+        ad = ads_by_id.get(row.get("ad_id"))
+        if ad is None:
             continue
         record = dict(row)
         record["duration"] = row.get("days_active", 0)
-        record["event_observed"] = bool(end_date) and end_date not in scrape_dates
+        record["event_observed"] = is_event_observed(ad, scrape_dates)
         records.append(record)
     return pd.DataFrame(records)
 
@@ -97,15 +105,14 @@ def build_survival_xy(
     stay aligned. A matched ad with no end date is retained as censored."""
     if scrape_dates is None:
         scrape_dates = identify_scrape_dates(ads)
-    end_date_by_id = {a["ad_archive_id"]: a.get("end_date") for a in ads}
+    ads_by_id = {a["ad_archive_id"]: a for a in ads}
 
-    matched_rows = [r for r in rows if r.get("ad_id") in end_date_by_id]
+    matched_rows = [r for r in rows if r.get("ad_id") in ads_by_id]
     X, duration = build_xy(matched_rows, "days_active", include_embeddings=False)
 
     event_observed = pd.Series(
         [
-            bool(end_date_by_id[r["ad_id"]])
-            and end_date_by_id[r["ad_id"]] not in scrape_dates
+            is_event_observed(ads_by_id[r["ad_id"]], scrape_dates)
             for r in matched_rows
         ],
         name="event_observed",

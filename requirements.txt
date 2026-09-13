@@ -6,6 +6,7 @@ google-genai>=1.0.0
 
 # ─── Deterministic vision ─────────────────────────────────────────────
 google-cloud-vision>=3.7.0      # OCR + text bounding boxes
+google-cloud-storage>=2.18.0    # durable compressed reference creatives
 opencv-python>=4.9.0            # K-Means colour clustering
 pillow>=10.0.0                  # image metadata / resize
 numpy>=1.26.0

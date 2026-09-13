@@ -79,6 +79,18 @@ class TestBuildSurvivalFrame:
         frame = build_survival_frame(rows, ads, scrape_dates={"2026-08-08"})
         assert bool(frame.iloc[0]["event_observed"]) is True
 
+    def test_active_flag_overrides_non_scrape_end_date(self):
+        rows = [_row("a", days_active=20)]
+        ads = [{"ad_archive_id": "a", "end_date": "2026-01-20", "is_active": True}]
+        frame = build_survival_frame(rows, ads, scrape_dates=set())
+        assert bool(frame.iloc[0]["event_observed"]) is False
+
+    def test_inactive_flag_is_event_even_on_scrape_date(self):
+        rows = [_row("a", days_active=20)]
+        ads = [{"ad_archive_id": "a", "end_date": "2026-01-20", "is_active": False}]
+        frame = build_survival_frame(rows, ads, scrape_dates={"2026-01-20"})
+        assert bool(frame.iloc[0]["event_observed"]) is True
+
     def test_event_observed_false_for_scrape_date(self):
         rows = [_row("1")]
         ads = [_ad("1", "2026-08-08")]

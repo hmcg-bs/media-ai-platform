@@ -23,6 +23,7 @@ def reports(tmp_path: Path) -> tuple[Path, Path]:
                     "top_covariates": [
                         ["categorical__cta_type_shop_now", 0.05],
                         ["categorical__dominant_color_unknown", 0.09],  # missing-data level
+                        ["categorical__primary_human_expression_N/A", 0.08],
                         ["categorical__background_style_Studio", -0.03],
                         # non-visual (campaign-ops dimension)
                         ["categorical__utm_medium_category_dedicated_paid_social", 0.04],
@@ -38,9 +39,7 @@ def reports(tmp_path: Path) -> tuple[Path, Path]:
                     ]
                 }
             },
-            "variants_featured_count": {
-                "without_embeddings": {"top_features": []}
-            },
+            "variants_featured_count": {"without_embeddings": {"top_features": []}},
         }
     }
     success_score_report = {
@@ -49,19 +48,22 @@ def reports(tmp_path: Path) -> tuple[Path, Path]:
                 # reliable direction: |signed|/|abs| = 0.8
                 {
                     "feature": "numeric__creative_uppercase_ratio",
-                    "mean_abs_shap": 0.05, "mean_signed_shap": 0.04,
+                    "mean_abs_shap": 0.05,
+                    "mean_signed_shap": 0.04,
                 },
                 # unreliable direction: ratio = 0.02 -- should become non-directional only
                 {"feature": "numeric__rating", "mean_abs_shap": 0.05, "mean_signed_shap": 0.001},
                 # raw embedding dim -- must be dropped entirely (unparseable/unbucketed)
                 {
                     "feature": "numeric__body_embedding_12",
-                    "mean_abs_shap": 0.09, "mean_signed_shap": 0.08,
+                    "mean_abs_shap": 0.09,
+                    "mean_signed_shap": 0.08,
                 },
                 # positioning context, opposite direction from the Cox entry below
                 {
                     "feature": "categorical__price_tier_budget",
-                    "mean_abs_shap": 0.02, "mean_signed_shap": -0.018,
+                    "mean_abs_shap": 0.02,
+                    "mean_signed_shap": -0.018,
                 },
             ]
         }
@@ -94,6 +96,7 @@ class TestExtractGenerationGuide:
         guide = extract_generation_guide(tr, sr)
         all_dims = [(s.dimension, s.value) for s in guide.visual_directives]
         assert ("dominant_color", "unknown") not in all_dims
+        assert ("primary_human_expression", "N/A") not in all_dims
         assert not any("infrequent_sklearn" in note for note in guide.non_directional_signals)
 
     def test_non_visual_campaign_dimension_dropped(self, reports):
@@ -106,7 +109,8 @@ class TestExtractGenerationGuide:
         tr, sr = reports
         guide = extract_generation_guide(tr, sr)
         cta = [
-            s for s in guide.visual_directives
+            s
+            for s in guide.visual_directives
             if s.dimension == "cta_type" and s.value == "shop_now"
         ]
         assert len(cta) == 1
@@ -145,10 +149,9 @@ class TestExtractGenerationGuide:
     def test_raw_embedding_dimension_never_surfaces_anywhere(self, reports):
         tr, sr = reports
         guide = extract_generation_guide(tr, sr)
-        haystack = (
-            [s.dimension for s in guide.visual_directives + guide.copy_style_directives]
-            + guide.non_directional_signals
-        )
+        haystack = [
+            s.dimension for s in guide.visual_directives + guide.copy_style_directives
+        ] + guide.non_directional_signals
         assert not any("embedding" in str(h) for h in haystack)
 
     def test_conflicting_direction_across_sources_both_preserved(self, reports):

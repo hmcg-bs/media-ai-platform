@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from ingestion.apify_client import ApifyClient, run_ad_scrape
+import pytest
+
+from ingestion.apify_client import ApifyClient, ApifyClientError, run_ad_scrape
 
 
 class TestRunAdScrape:
@@ -121,6 +123,7 @@ def test_actor_url_encodes_query_and_country() -> None:
 
     class FakeRun:
         status = "SUCCEEDED"
+        status_message = "Scraped all urls"
         default_dataset_id = "dataset-1"
 
     class FakeActor:
@@ -151,3 +154,69 @@ def test_actor_url_encodes_query_and_country() -> None:
     url = captured["input"]["urls"][0]["url"]
     assert "q=protein+powder+%26+vitamins" in url
     assert "country=SG" in url
+
+
+def test_poll_uses_actor_minimum_count_for_small_page_batch() -> None:
+    captured: dict = {}
+
+    class FakeRun:
+        status = "SUCCEEDED"
+        status_message = "Scraped all urls"
+        default_dataset_id = "dataset-1"
+
+    class FakeActor:
+        def call(self, run_input, timeout):
+            captured["input"] = run_input
+            return FakeRun()
+
+    class FakeDataset:
+        def list_items(self):
+            return type("Page", (), {"items": []})()
+
+    class FakeSdk:
+        def actor(self, actor_id):
+            return FakeActor()
+
+        def dataset(self, dataset_id):
+            return FakeDataset()
+
+    client = ApifyClient(api_token="[REDACTED:api-key]")
+    client._client = FakeSdk()
+    result = client.poll_ad_pages(["123"], count=1, actor_id="fake/actor")
+    assert captured["input"]["count"] == 10
+    assert captured["input"]["urls"] == [
+        {
+            "url": (
+                "https://www.facebook.com/ads/library/?active_status=all&ad_type=all"
+                "&country=US&view_all_page_id=123"
+            )
+        }
+    ]
+    assert result.sources_exhausted is True
+
+
+def test_actor_dataset_error_record_raises_instead_of_becoming_an_ad() -> None:
+    class FakeRun:
+        status = "SUCCEEDED"
+        status_message = "Scraped all urls"
+        default_dataset_id = "dataset-1"
+
+    class FakeActor:
+        def call(self, run_input, timeout):
+            return FakeRun()
+
+    class FakeDataset:
+        def list_items(self):
+            return type("Page", (), {"items": [{"error": "minimum is 10"}]})()
+
+    class FakeSdk:
+        def actor(self, actor_id):
+            return FakeActor()
+
+        def dataset(self, dataset_id):
+            return FakeDataset()
+
+    client = ApifyClient(api_token="[REDACTED:api-key]")
+    client._client = FakeSdk()
+    with pytest.raises(ApifyClientError, match="dataset errors"):
+        client.poll_ad_pages(["123"], count=1, actor_id="fake/actor")

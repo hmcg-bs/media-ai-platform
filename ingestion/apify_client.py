@@ -8,6 +8,7 @@ calls the configured actor, and retries on transient failures (429, 5xx, timeout
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 from urllib.parse import urlencode
@@ -29,6 +30,17 @@ class ApifyClientError(Exception):
     """Raised when Apify actor run fails."""
 
     pass
+
+
+@dataclass(frozen=True)
+class ActorDatasetResult:
+    items: list[dict]
+    status_message: str
+
+    @property
+    def sources_exhausted(self) -> bool:
+        """Whether the actor says it exhausted URLs rather than its result cap."""
+        return "scraped all urls" in self.status_message.lower()
 
 
 def _is_retryable(exc: Exception) -> bool:
@@ -55,6 +67,40 @@ class ApifyClient:
 
             self._client = _ApifyClient(token=self.api_token)
         return self._client
+
+    def _run_actor_result(self, input_dict: dict[str, Any], actor_id: str) -> ActorDatasetResult:
+        """Run one actor input and retain completion evidence with its dataset."""
+        try:
+            run = self.client.actor(actor_id).call(
+                run_input=input_dict,
+                timeout=timedelta(seconds=self.timeout_s),
+            )
+        except Exception as e:
+            msg = f"Apify actor {actor_id} failed: {e}"
+            logger.error("apify_actor_error", exc_str=str(e), actor_id=actor_id)
+            raise ApifyClientError(msg) from e
+
+        logger.info("apify_actor_completed", actor_id=actor_id, run_status=run.status)
+        try:
+            items = self.client.dataset(run.default_dataset_id).list_items().items
+        except Exception as e:
+            msg = f"Failed to fetch dataset from {run.default_dataset_id}: {e}"
+            logger.error("apify_dataset_error", exc_str=str(e))
+            raise ApifyClientError(msg) from e
+        actor_errors = [str(item["error"]) for item in items if item.get("error")]
+        if actor_errors:
+            msg = f"Apify actor {actor_id} returned dataset errors: {actor_errors[:3]}"
+            logger.error("apify_dataset_item_error", actor_id=actor_id, errors=actor_errors[:3])
+            raise ApifyClientError(msg)
+        logger.info("apify_dataset_fetched", item_count=len(items))
+        return ActorDatasetResult(
+            items=items,
+            status_message=str(getattr(run, "status_message", "") or ""),
+        )
+
+    def _run_actor_input(self, input_dict: dict[str, Any], actor_id: str) -> list[dict]:
+        """Run one actor input and return its default dataset items."""
+        return self._run_actor_result(input_dict, actor_id).items
 
     @retry(
         stop=stop_after_attempt(6),
@@ -91,17 +137,19 @@ class ApifyClient:
         actor_id = actor_id or settings.apify_actor_id
 
         # Construct Ad Library search URL with the search query
-        query = urlencode({
-            "active_status": "active",
-            "ad_type": "all",
-            "country": country.upper(),
-            "is_targeted_country": "false",
-            "media_type": "all",
-            "q": search_query,
-            "search_type": "keyword_unordered",
-            "sort_data[direction]": "desc",
-            "sort_data[mode]": "total_impressions",
-        })
+        query = urlencode(
+            {
+                "active_status": "active",
+                "ad_type": "all",
+                "country": country.upper(),
+                "is_targeted_country": "false",
+                "media_type": "all",
+                "q": search_query,
+                "search_type": "keyword_unordered",
+                "sort_data[direction]": "desc",
+                "sort_data[mode]": "total_impressions",
+            }
+        )
         ad_library_url = f"https://www.facebook.com/ads/library/?{query}"
 
         input_dict = {
@@ -124,38 +172,60 @@ class ApifyClient:
             count=count,
         )
 
-        try:
-            run = self.client.actor(actor_id).call(
-                run_input=input_dict,
-                timeout=timedelta(seconds=self.timeout_s),
-            )
-        except Exception as e:
-            msg = f"Apify actor {actor_id} failed: {e}"
-            logger.error("apify_actor_error", exc_str=str(e), actor_id=actor_id)
-            raise ApifyClientError(msg) from e
+        return self._run_actor_input(input_dict, actor_id)
 
-        logger.info(
-            "apify_actor_completed",
-            actor_id=actor_id,
-            run_status=run.status,
-        )
+    @retry(
+        stop=stop_after_attempt(6),
+        wait=wait_exponential(multiplier=2, min=2, max=30),
+        retry=retry_if_exception(_is_retryable),
+        before_sleep=lambda retry_state: logger.info(
+            "apify_retry",
+            attempt=retry_state.attempt_number,
+            exc_str=str(retry_state.outcome.exception()),
+        ),
+    )
+    def poll_ad_pages(
+        self,
+        page_ids: list[str],
+        count: int,
+        actor_id: str | None = None,
+        country: str = "US",
+    ) -> ActorDatasetResult:
+        """Poll page inventories so tracked IDs can be matched exactly.
 
-        # Fetch the dataset items (the raw ad records).
-        try:
-            dataset_page = self.client.dataset(run.default_dataset_id).list_items()
-            # DatasetItemsPage has an 'items' property with the list of records
-            items = dataset_page.items
-        except Exception as e:
-            msg = f"Failed to fetch dataset from {run.default_dataset_id}: {e}"
-            logger.error("apify_dataset_error", exc_str=str(e))
-            raise ApifyClientError(msg) from e
-
-        logger.info(
-            "apify_dataset_fetched",
-            item_count=len(items),
-        )
-
-        return items
+        A returned inactive row or stop date is explicit evidence. Absence is
+        only a *miss* when the same page returned at least one result. This
+        positive-control rule prevents redirect/source failures from turning
+        an empty actor dataset into false deactivation evidence.
+        """
+        if not page_ids:
+            return ActorDatasetResult(items=[], status_message="no pages requested")
+        settings = get_settings()
+        actor_id = actor_id or settings.apify_actor_id
+        urls = [
+            {
+                "url": (
+                    "https://www.facebook.com/ads/library/?active_status=all&ad_type=all"
+                    f"&country={country.upper()}&view_all_page_id={page_id}"
+                )
+            }
+            for page_id in page_ids
+        ]
+        input_dict = {
+            "urls": urls,
+            # The actor rejects paid-result limits below 10 even when fewer
+            # source URLs are requested (confirmed against the live actor).
+            "count": max(10, count),
+            "scrapeAdDetails": True,
+            "scrapePageAds": {
+                "activeStatus": "all",
+                "countryCode": country.upper(),
+                "period": "",
+                "sortBy": "impressions_desc",
+            },
+        }
+        logger.info("apify_ad_page_poll_start", page_count=len(page_ids), country=country)
+        return self._run_actor_result(input_dict, actor_id)
 
 
 # Singleton instance + injectable run_fn for tests.

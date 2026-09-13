@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,16 @@ DEFAULT_ADS_FILE = DATA_DIR / "supplements_enriched.json"
 DEFAULT_REPORT_FILE = DATA_DIR / "model_training_report.json"
 
 REGRESSION_TARGETS = ("collation_count",)
+REPORT_SCHEMA_VERSION = "meta-ads-training-report-v2"
+
+
+def _implementation_sha256() -> str:
+    """Fingerprint the model/report implementation without relying on Git state."""
+    digest = hashlib.sha256()
+    for path in sorted(Path(__file__).parent.glob("*.py")):
+        digest.update(path.name.encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
 
 
 def _sha256(path: Path) -> str:
@@ -46,6 +57,34 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _git_provenance() -> dict[str, Any]:
+    """Record review provenance without making Git state the reproducibility key."""
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        branch = subprocess.run(
+            ["git", "branch", "--show-current"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        dirty = bool(
+            subprocess.run(
+                ["git", "status", "--porcelain"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return {"git_commit": None, "git_branch": None, "git_worktree_dirty": None}
+    return {"git_commit": commit, "git_branch": branch, "git_worktree_dirty": dirty}
 
 
 def run(
@@ -114,10 +153,22 @@ def run(
     if dropped_cols:
         print(f"  Dropped {len(dropped_cols)} zero-variance columns before Cox fit: {dropped_cols}")
 
-    cox_model = fit_cox_model(X_train_df, duration_train, event_train)
-    survival_results = evaluate_cox_model(cox_model, X_test_df, duration_test, event_test)
+    train_events = int(event_train.sum())
+    if train_events < 5:
+        survival_results = {
+            "n_test": len(X_test_df),
+            "n_events_observed_test": int(event_test.sum()),
+            "concordance_index": None,
+            "evaluation_status": "insufficient_observed_events",
+            "top_covariates": [],
+        }
+    else:
+        cox_model = fit_cox_model(X_train_df, duration_train, event_train)
+        survival_results = evaluate_cox_model(
+            cox_model, X_test_df, duration_test, event_test
+        )
     survival_results["n_train"] = len(X_train_df)
-    survival_results["n_events_observed_train"] = int(event_train.sum())
+    survival_results["n_events_observed_train"] = train_events
     print("\n=== days_active (Cox Proportional Hazards, censored) ===")
     print(f"  train/test rows: {survival_results['n_train']}/{survival_results['n_test']}")
     print(
@@ -145,14 +196,17 @@ def run(
             X_tr, y_tr = build_xy(train_rows, target, include_embeddings=include_embeddings)
             X_te, y_te = build_xy(test_rows, target, include_embeddings=include_embeddings)
             if len(y_tr) < 20 or len(y_te) < 5:
-                print(f"\n=== {target} ({label}) === skipped, too few labeled rows "
-                      f"(train={len(y_tr)}, test={len(y_te)})")
+                print(
+                    f"\n=== {target} ({label}) === skipped, too few labeled rows "
+                    f"(train={len(y_tr)}, test={len(y_te)})"
+                )
                 continue
             results = train_and_evaluate(X_tr, y_tr, X_te, y_te, n_jobs=n_jobs)
             print_results(target, label, results)
             model_results[target][label] = results
 
     report = {
+        "report_schema_version": REPORT_SCHEMA_VERSION,
         "run_manifest": {
             "matrix_file": str(matrix_file),
             "matrix_sha256": _sha256(matrix_file),
@@ -161,18 +215,23 @@ def run(
             "random_state": random_state,
             "workers_per_model": n_jobs,
             "embeddings_available": has_embeddings,
+            "implementation_sha256": _implementation_sha256(),
+            "longevity_event_semantics": (
+                "is_active=false; legacy end_date heuristic only when activity status is absent"
+            ),
+            **_git_provenance(),
         },
         "quality_report": {
             "columns": quality_report["columns"],
             "flagged_columns": [p["column"] for p in quality_report["flagged"]],
         },
         "split": {
-            "n_train": len(train_rows), "n_test": len(test_rows), "n_dropped": dropped,
+            "n_train": len(train_rows),
+            "n_test": len(test_rows),
+            "n_dropped": dropped,
             **split_details,
         },
-        "longevity_benchmarks": longevity_benchmarks(
-            rows, ads, identify_scrape_dates(ads)
-        ),
+        "longevity_benchmarks": longevity_benchmarks(rows, ads, identify_scrape_dates(ads)),
         "model_results": model_results,
     }
     atomic_write_json(report_file, report)

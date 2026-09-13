@@ -19,3 +19,6 @@ Detailed commit history with dates, branches, and descriptions.
 | 2026-09-12 | auto/meta-ads-model-pipeline | 922a057 | Log keyless GCP orb setup |
 | 2026-09-12 | auto/meta-ads-model-pipeline | 105902f | Correct deployed GCP WIF provider |
 | 2026-09-12 | auto/meta-ads-model-pipeline | 5cd852f | Pool rare cognitive categories before training |
+| 2026-09-12 | auto/meta-ads-model-pipeline | ac80222 | Persist and validate Meta ad learning evidence |
+| 2026-09-12 | auto/meta-ads-model-pipeline | 9879783 | Document durable Supplements learning workflow |
+| 2026-09-12 | auto/meta-ads-model-pipeline | 6f40f12 | Correct live warehouse and longevity semantics |

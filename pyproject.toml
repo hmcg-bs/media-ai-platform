@@ -51,6 +51,7 @@ dependencies = [
     "python-pptx>=1.0.2",
     "psd-tools>=1.17.4",
     "apify-client>=3.0.6",
+    "google-cloud-storage>=2.18.0",
 ]
 
 [project.optional-dependencies]

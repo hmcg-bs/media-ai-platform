@@ -8,6 +8,8 @@ from typing import Any
 import numpy as np
 from lifelines import KaplanMeierFitter
 
+from pipeline.model_training.survival import is_event_observed
+
 
 def temporal_advertiser_split(
     rows: list[dict[str, Any]],
@@ -125,8 +127,7 @@ def longevity_benchmarks(
             if not ad:
                 continue
             durations.append(max(0.0, float(row.get("days_active") or 0)))
-            end_date = ad.get("end_date")
-            events.append(bool(end_date) and end_date not in scrape_dates)
+            events.append(is_event_observed(ad, scrape_dates))
         result: dict[str, Any] = {
             "n": len(durations), "events_observed": int(sum(events)),
             "status": "insufficient_sample" if len(durations) < minimum_size else "ok",

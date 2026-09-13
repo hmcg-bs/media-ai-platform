@@ -61,3 +61,29 @@ unnecessary regenerations. One observation is not enough to settle it.
 **4. Uncommitted Generation v2 work** — at handover, 17 changed/new files
 (the whole v2 build plus docs) were uncommitted on `master`. Decide whether to
 commit them before the crew builds on top.
+
+## 2026-09-12 — Meta warehouse live writes need BigQuery and Storage data roles
+
+**RESOLVED 2026-09-12.** The owner created both resources and granted dataset Writer/Data Editor,
+bucket Object Admin, and project BigQuery Job User. Live schema creation, object write/read, and
+full metadata/feature backfill now pass.
+
+**Blocked on**: Keyless WIF token minting succeeds, but the `amp-orbs` principal set receives
+`bigquery.datasets.create` denied for `clean-patrol-496108-m9.ad_intelligence` and
+`storage.buckets.create` denied for `clean-patrol-496108-m9-media-ai-ads`.
+
+**Why it needs a human**: IAM and creation of shared cloud resources require a project
+administrator. The existing logging/monitoring/service-usage/Vertex roles do not grant data
+warehouse or object-storage writes.
+
+**What I did instead**: Implemented and offline-tested append-only schemas, idempotent writes,
+lifecycle polling, survival reports, and content-addressed image storage. No paid polling or bulk
+image archive was attempted after the permission checks failed.
+
+**Options, with a recommendation**: Prefer least privilege: have an administrator create the
+`ad_intelligence` dataset in `us-central1` and the
+`clean-patrol-496108-m9-media-ai-ads` bucket in `us-central1`, then grant the WIF principal set
+BigQuery Data Editor on that dataset and Storage Object Admin on that bucket. Also grant BigQuery
+Job User at project level for queries. Alternatively, project-level BigQuery User and Storage Admin
+allow this workflow to create resources itself, but are broader than needed. Then rerun the schema
+health check and a one-row sync before the full corpus sync.

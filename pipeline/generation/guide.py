@@ -47,37 +47,67 @@ MIN_DIRECTION_RELIABILITY = 0.10
 # Category *levels* that mean "no data" or a pooled rare level, never a real
 # creative choice. `infrequent_sklearn` is produced by the train-only category
 # frequency cap; it means several unrelated rare values, not a renderable value.
-_MISSING_DATA_LEVELS = {"unknown", "none", "nan", "", "infrequent_sklearn"}
+_MISSING_DATA_LEVELS = {"unknown", "none", "nan", "n/a", "", "infrequent_sklearn"}
 
 # Dimension name -> bucket. Explicit allowlist rather than inferring from
 # name patterns, so a new feature silently landing in the wrong bucket (or
 # being silently treated as a creative lever when it's really a campaign-
 # operations signal) can't happen without someone deciding where it goes.
 _VISUAL_CATEGORICAL_DIMENSIONS = {
-    "cta_type", "dominant_color", "hook_framework", "background_style",
-    "text_alignment", "contrast_ratio_type", "headline_zone",
-    "product_visual_state", "texture_type", "primary_human_demographic",
-    "primary_human_action", "primary_human_expression", "primary_human_wardrobe",
+    "cta_type",
+    "dominant_color",
+    "hook_framework",
+    "background_style",
+    "text_alignment",
+    "contrast_ratio_type",
+    "headline_zone",
+    "product_visual_state",
+    "texture_type",
+    "primary_human_demographic",
+    "primary_human_action",
+    "primary_human_expression",
+    "primary_human_wardrobe",
 }
 _VISUAL_NUMERIC_DIMENSIONS = {
-    "cta_present", "palette_vibrancy", "psychological_warmth_index",
-    "copy_canvas_coverage", "asset_canvas_coverage",
+    "cta_present",
+    "palette_vibrancy",
+    "psychological_warmth_index",
+    "copy_canvas_coverage",
+    "asset_canvas_coverage",
     "rating",  # whether/how prominently to show a rating badge -- a real creative choice
-    "secondary_prop_count", "object_relationship_count", "texture_visible",
-    "human_presence", "human_model_count", "authority_flag_count",
+    "secondary_prop_count",
+    "object_relationship_count",
+    "texture_visible",
+    "human_presence",
+    "human_model_count",
+    "authority_flag_count",
 }
 _COPY_STYLE_NUMERIC_DIMENSIONS = {
-    "uppercase_ratio", "reading_grade_level", "whitespace_ratio",
-    "copy_block_count", "cultural_branding_count", "headline_char_count",
-    "headline_to_subtext_scale_ratio", "avg_words_per_block", "total_word_count",
-    "title_length", "body_length", "headline_word_count", "total_char_count",
+    "uppercase_ratio",
+    "reading_grade_level",
+    "whitespace_ratio",
+    "copy_block_count",
+    "cultural_branding_count",
+    "headline_char_count",
+    "headline_to_subtext_scale_ratio",
+    "avg_words_per_block",
+    "total_word_count",
+    "title_length",
+    "body_length",
+    "headline_word_count",
+    "total_char_count",
 }
 # Real signal, but describes campaign *operations* (targeting/attribution/
 # how many platforms), not anything a generation agent renders as pixels.
 _NON_VISUAL_EXCLUDED_DIMENSIONS = {
-    "utm_medium_category", "campaign_role_signal", "publisher_count",
-    "cluster_variant_rate", "cluster_mean_days_active", "utm_dynamic_naming",
-    "utm_content_granularity_score", "has_utm_tracking",
+    "utm_medium_category",
+    "campaign_role_signal",
+    "publisher_count",
+    "cluster_variant_rate",
+    "cluster_mean_days_active",
+    "utm_dynamic_naming",
+    "utm_content_granularity_score",
+    "has_utm_tracking",
 }
 # A business/positioning fact worth keeping as *context* for the guide
 # (e.g. "for a budget-tier product...") -- never a rendered visual element.
@@ -161,11 +191,16 @@ def _from_cox(top_covariates: list[list[Any]], target: str) -> list[dict[str, An
         bucket = _bucket_for(dimension)
         if bucket is None or bucket == "excluded_non_visual":
             continue
-        out.append({
-            "dimension": dimension, "value": value,
-            "direction": _direction_from_sign(coef), "magnitude": abs(coef),
-            "source": f"cox:{target}", "bucket": bucket,
-        })
+        out.append(
+            {
+                "dimension": dimension,
+                "value": value,
+                "direction": _direction_from_sign(coef),
+                "magnitude": abs(coef),
+                "source": f"cox:{target}",
+                "bucket": bucket,
+            }
+        )
     return out
 
 
@@ -194,11 +229,16 @@ def _from_shap(
                 "inconsistent across ads to trust)"
             )
             continue
-        directional.append({
-            "dimension": dimension, "value": value,
-            "direction": _direction_from_sign(signed_shap), "magnitude": abs_shap,
-            "source": source_label, "bucket": bucket,
-        })
+        directional.append(
+            {
+                "dimension": dimension,
+                "value": value,
+                "direction": _direction_from_sign(signed_shap),
+                "magnitude": abs_shap,
+                "source": source_label,
+                "bucket": bucket,
+            }
+        )
     return directional, non_directional
 
 
@@ -207,8 +247,10 @@ def _to_signals(raw: list[dict[str, Any]], bucket: str) -> list[DirectionalSigna
     filtered.sort(key=lambda r: -r["magnitude"])
     return [
         DirectionalSignal(
-            dimension=r["dimension"], value=r["value"],
-            direction=r["direction"], magnitude=round(r["magnitude"], 5),
+            dimension=r["dimension"],
+            value=r["value"],
+            direction=r["direction"],
+            magnitude=round(r["magnitude"], 5),
             source=r["source"],
         )
         for r in filtered
@@ -271,8 +313,10 @@ def extract_generation_guide(
     # separately, never asserted a direction they don't have.
     for target in ("collation_count",):
         top_features = (
-            training_report.get("model_results", {}).get(target, {})
-            .get("without_embeddings", {}).get("top_features", [])
+            training_report.get("model_results", {})
+            .get(target, {})
+            .get("without_embeddings", {})
+            .get("top_features", [])
         )
         for name, importance in top_features:
             parsed = _parse_feature_name(name)
