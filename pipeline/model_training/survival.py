@@ -30,10 +30,16 @@ from lifelines.utils import concordance_index
 from pipeline.model_training.preprocessing import build_xy
 
 
-def identify_scrape_dates(ads: list[dict[str, Any]], frequency_threshold: float = 0.01) -> set[str]:
+def identify_scrape_dates(
+    ads: list[dict[str, Any]],
+    frequency_threshold: float = 0.01,
+    minimum_count: int = 5,
+) -> set[str]:
     """Returns the set of end_date values that are almost certainly scrape-
     run stamps, not genuine individual ad-death dates -- any end_date shared
-    by more than `frequency_threshold` of the corpus. A real death date
+    by at least `minimum_count` ads and more than `frequency_threshold` of
+    the corpus. The absolute floor prevents coincidental pairs in small
+    corpora being relabeled as censoring. A real death date
     being independently distributed across many unrelated products/
     advertisers essentially never clusters this heavily by chance; a
     scrape-run timestamp does, by construction."""
@@ -42,7 +48,10 @@ def identify_scrape_dates(ads: list[dict[str, Any]], frequency_threshold: float 
         return set()
     counts = Counter(end_dates)
     threshold_count = frequency_threshold * len(end_dates)
-    return {date for date, count in counts.items() if count > threshold_count}
+    return {
+        date for date, count in counts.items()
+        if count > threshold_count and count >= minimum_count
+    }
 
 
 def build_survival_frame(

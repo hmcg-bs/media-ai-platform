@@ -10,6 +10,7 @@ from __future__ import annotations
 import random
 
 from pipeline.model_training.success_score import (
+    SuccessScoreCalibrator,
     build_xy_composite,
     compute_composite_success_score,
     train_and_explain,
@@ -39,6 +40,18 @@ def _synthetic_rows(n: int) -> list[dict]:
 
 
 class TestComputeCompositeSuccessScore:
+    def test_external_rows_do_not_change_training_calibration(self):
+        train = [
+            {"days_active": 10, "brand_scaling_count": 1, "collation_count": 1},
+            {"days_active": 20, "brand_scaling_count": 2, "collation_count": 2},
+        ]
+        calibrator = SuccessScoreCalibrator(train)
+        before = calibrator.transform(train)
+        calibrator.transform([
+            {"days_active": 9999, "brand_scaling_count": 999, "collation_count": 999}
+        ])
+        assert calibrator.transform(train) == before
+
     def test_longevity_is_base_and_score_is_bounded(self):
         rows = [
             {"ad_id": "1", "days_active": 1, "brand_scaling_count": 100, "collation_count": 10},
@@ -101,6 +114,9 @@ class TestTrainAndExplain:
         assert results["n_train"] + results["n_test"] == 60
         assert results["split_strategy"] == "advertiser_group_holdout"
         assert results["advertiser_overlap"] == 0
+        assert results["label_calibration"] == "training_only_empirical_percentiles"
+        assert results["best_parameters"]
+        assert len(results["tuning_results"]) == 4
         assert results["baseline_mae"] >= 0
         assert 0 <= results["top_20pct_precision"] <= 1
         assert len(results["top_features_by_shap"]) > 0

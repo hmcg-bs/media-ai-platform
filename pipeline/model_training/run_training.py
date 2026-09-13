@@ -15,11 +15,11 @@ from typing import Any
 
 from pipeline.artifacts import atomic_write_json, exclusive_output
 from pipeline.model_training.data_quality import build_quality_report, print_quality_report
+from pipeline.model_training.evaluation import longevity_benchmarks, temporal_advertiser_split
 from pipeline.model_training.preprocessing import (
     build_preprocessor,
     build_xy,
     load_start_dates,
-    time_based_split,
 )
 from pipeline.model_training.success_score import train_and_explain
 from pipeline.model_training.survival import (
@@ -27,6 +27,7 @@ from pipeline.model_training.survival import (
     drop_zero_variance_columns,
     evaluate_cox_model,
     fit_cox_model,
+    identify_scrape_dates,
 )
 from pipeline.model_training.trainer import print_results, train_and_evaluate
 
@@ -61,10 +62,10 @@ def run(
     print_quality_report(quality_report)
 
     start_dates = load_start_dates(ads)
-    train_rows, test_rows = time_based_split(rows, start_dates)
+    train_rows, test_rows, split_details = temporal_advertiser_split(rows, start_dates)
     dropped = len(rows) - len(train_rows) - len(test_rows)
     print(
-        f"\nTime-based split: {len(train_rows)} train / {len(test_rows)} test "
+        f"\nTemporal advertiser split: {len(train_rows)} train / {len(test_rows)} test "
         f"({dropped} rows dropped, no start_date match)"
     )
 
@@ -80,6 +81,7 @@ def run(
             include_embeddings=include_embeddings,
             random_state=random_state,
             n_jobs=n_jobs,
+            start_dates=start_dates,
         )
         model_results["composite_success_score"][label] = composite
         print(f"\n=== composite_success_score ({label}) ===")
@@ -152,7 +154,13 @@ def run(
             "columns": quality_report["columns"],
             "flagged_columns": [p["column"] for p in quality_report["flagged"]],
         },
-        "split": {"n_train": len(train_rows), "n_test": len(test_rows), "n_dropped": dropped},
+        "split": {
+            "n_train": len(train_rows), "n_test": len(test_rows), "n_dropped": dropped,
+            **split_details,
+        },
+        "longevity_benchmarks": longevity_benchmarks(
+            rows, ads, identify_scrape_dates(ads)
+        ),
         "model_results": model_results,
     }
     atomic_write_json(report_file, report)

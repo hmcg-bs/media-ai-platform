@@ -34,6 +34,31 @@ STEP2_OUT_DIR = Path(__file__).parent.parent.parent / "out" / "step2"
 DEFAULT_ADS_FILE = DATA_DIR / "supplements_enriched.json"
 DEFAULT_OUTPUT_FILE = DATA_DIR / "feature_matrix.json"
 
+_SUPPLEMENT_SUBCATEGORY_TERMS = {
+    "protein": ("protein powder", "whey", "casein", "plant protein"),
+    "creatine": ("creatine",),
+    "collagen": ("collagen",),
+    "probiotics": ("probiotic", "gut health"),
+    "multivitamin": ("multivitamin", "multi-vitamin"),
+    "omega-3": ("fish oil", "omega 3", "omega-3"),
+    "magnesium": ("magnesium",),
+    "weight management": ("weight loss", "fat burner", "weight management"),
+    "pre-workout": ("pre workout", "pre-workout"),
+    "sleep": ("melatonin", "sleep supplement", "sleep support"),
+    "vitamins": ("vitamin",),
+}
+
+
+def infer_supplement_subcategory(ad: dict[str, Any]) -> str:
+    """Deterministic fallback when landing-page/query provenance is absent."""
+    text = " ".join(
+        str(ad.get(key) or "") for key in ("title", "body", "caption", "page_name")
+    ).lower()
+    for category, terms in _SUPPLEMENT_SUBCATEGORY_TERMS.items():
+        if any(term in text for term in terms):
+            return category
+    return "other supplements"
+
 
 def _write_rows(path: Path, rows: list[dict[str, Any]]) -> None:
     """Atomic checkpoint publish; caller owns the output lock."""
@@ -100,6 +125,13 @@ def build_feature_matrix(
         ad = ads_by_id.get(str(row.get("ad_id")), {})
         page_id = str(ad.get("page_id") or row.get("page_id") or "")
         row["page_id"] = page_id
+        search_queries = ad.get("search_queries", [])
+        row["product_subcategory"] = (
+            (ad.get("product_page") or {}).get("product_subcategory")
+            or ((search_queries or [""])[0])
+            or row.get("product_subcategory")
+            or infer_supplement_subcategory(ad)
+        )
         row["brand_scaling_count"] = scaling_counts.get(page_id, 1)
         rows.append(row)
     already_have_ids: set[str] = {r["ad_id"] for r in existing_rows}
@@ -131,6 +163,11 @@ def build_feature_matrix(
         rows.append({
             "ad_id": ad_id,
             "page_id": page_id,
+            "product_subcategory": (
+                (ad.get("product_page") or {}).get("product_subcategory")
+                or ((ad.get("search_queries") or [""])[0])
+                or infer_supplement_subcategory(ad)
+            ),
             "brand_scaling_count": scaling_counts.get(page_id, 1),
             "price_tier": price_tier,
             **features,

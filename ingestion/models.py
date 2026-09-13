@@ -71,6 +71,12 @@ class CompetitorAd(BaseModel):
     publisher_platforms: list[str] = Field(default_factory=list)
     snapshot_url: str = ""              # Ad Library preview page
 
+    # Discovery provenance. One ad can match several supplement queries;
+    # retaining all of them enables subcategory coverage/drift analysis and
+    # makes corpus composition reproducible without treating the search term
+    # as a performance signal.
+    search_queries: list[str] = Field(default_factory=list)
+
     # Filled after download / at ingest time
     local_image_path: str | None = None
     ingested_at: str = ""

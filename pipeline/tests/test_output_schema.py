@@ -3,7 +3,45 @@ fully offline."""
 
 from __future__ import annotations
 
-from pipeline.models.output_schema import MarketingPsychology
+from pipeline.models.output_schema import (
+    ExtractionResult,
+    HumanDetail,
+    HumanModelAnalysis,
+    MarketingPsychology,
+    ObjectRelationship,
+    SecondaryProp,
+    SpatialAndNestedObjects,
+    TextureDemonstration,
+)
+
+
+def test_flatten_features_represents_deep_cognitive_output() -> None:
+    result = ExtractionResult(
+        spatial_and_nested_objects=SpatialAndNestedObjects(
+            secondary_props=[SecondaryProp(name="shaker")],
+            object_relationships=[
+                ObjectRelationship(subject="hand", relationship_action="holding", object="jar")
+            ],
+            texture_demonstration=TextureDemonstration(visible=True, texture_type="powder"),
+        ),
+        human_model_analysis=HumanModelAnalysis(
+            human_presence=True,
+            model_count=1,
+            details=[HumanDetail(action_performed="drinking", micro_expression="smiling")],
+        ),
+        marketing_psychology=MarketingPsychology(authority_flags=["doctor"]),
+    )
+
+    features = result.flatten_features()
+
+    assert features["secondary_prop_count"] == 1
+    assert features["object_relationship_count"] == 1
+    assert features["texture_visible"] == 1
+    assert features["texture_type"] == "powder"
+    assert features["human_presence"] == 1
+    assert features["primary_human_action"] == "drinking"
+    assert features["primary_human_expression"] == "smiling"
+    assert features["authority_flag_count"] == 1
 
 
 class TestMarketingPsychologyReadingGradeLevelCoercion:

@@ -57,6 +57,18 @@ _STEP2_FLATTENED_KEYS = (
     "n_blocks_top",
     "n_blocks_middle",
     "n_blocks_bottom",
+    "product_visual_state",
+    "secondary_prop_count",
+    "object_relationship_count",
+    "texture_visible",
+    "texture_type",
+    "human_presence",
+    "human_model_count",
+    "primary_human_demographic",
+    "primary_human_action",
+    "primary_human_expression",
+    "primary_human_wardrobe",
+    "authority_flag_count",
 )
 
 

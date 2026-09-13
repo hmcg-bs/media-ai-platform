@@ -31,10 +31,14 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 from ingestion.download import _get_extension_from_url
+from pipeline.artifacts import atomic_write_json, exclusive_output
 from pipeline.config import get_settings
 from pipeline.logger import configure_logging, get_logger
 from pipeline.orchestrator import build_default_stages, run_one
 from pipeline.stages.base_stage import BaseStage
+from pipeline.stages.stage_01_metadata import MetadataStage
+from pipeline.stages.stage_03_color import ColorStage
+from pipeline.stages.stage_05_cognitive import CognitiveStage
 
 logger = get_logger(__name__)
 
@@ -97,7 +101,7 @@ def _process_one_ad(
         ext = _get_extension_from_url(url)
         context = run_one(Path(f"{ad_id}.{ext}"), stages, image_bytes=image_bytes)
         out_path = out_dir / f"{ad_id}.json"
-        out_path.write_text(json.dumps(context.result.model_dump(mode="json"), indent=2))
+        atomic_write_json(out_path, context.result.model_dump(mode="json"))
         logger.info("step2_asset_written", ad_id=ad_id, failed_stages=context.failed_stages)
         return "processed"
     except Exception as exc:  # noqa: BLE001 — one ad's freak failure must never abort the batch
@@ -210,6 +214,15 @@ def main() -> None:
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
+        "--cognitive-provider", choices=("configured", "replicate"), default="configured",
+        help="Use configured provider, or explicitly use Replicate for this run.",
+    )
+    parser.add_argument(
+        "--skip-ocr", action="store_true",
+        help="Skip Cloud Vision OCR when GCP credentials are unavailable; "
+        "missing OCR features remain explicit.",
+    )
+    parser.add_argument(
         "--concurrency",
         type=int,
         default=4,
@@ -221,13 +234,35 @@ def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
 
-    count = run_step2_pipeline(
-        args.ads,
-        args.out,
-        sample_size=args.sample_size,
-        seed=args.seed,
-        concurrency=args.concurrency,
-    )
+    stages = None
+    if args.cognitive_provider == "replicate" or args.skip_ocr:
+        if args.cognitive_provider == "replicate" and not settings.replicate_api_token:
+            parser.error("--cognitive-provider replicate requires REPLICATE_API_TOKEN")
+        stages = [MetadataStage()]
+        if not args.skip_ocr:
+            from pipeline.stages.stage_02_ocr import OCRStage
+
+            stages.append(OCRStage())
+        stages.extend([
+            ColorStage(settings=settings),
+            CognitiveStage(
+                use_replicate=(args.cognitive_provider == "replicate")
+                or settings.enable_replicate_cognitive,
+                settings=settings,
+            ),
+        ])
+
+    # A directory-level owner lock avoids duplicate paid calls when two jobs
+    # target the same resumable output directory.
+    with exclusive_output(args.out / ".step2-job"):
+        count = run_step2_pipeline(
+            args.ads,
+            args.out,
+            sample_size=args.sample_size,
+            seed=args.seed,
+            stages=stages,
+            concurrency=args.concurrency,
+        )
     print(f"Processed {count} ad(s) -> {args.out}")
 
 

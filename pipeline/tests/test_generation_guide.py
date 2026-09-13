@@ -77,6 +77,17 @@ def reports(tmp_path: Path) -> tuple[Path, Path]:
 
 
 class TestExtractGenerationGuide:
+    def test_reads_composite_shap_from_single_training_report(self, reports, tmp_path):
+        tr, sr = reports
+        training = json.loads(tr.read_text())
+        training["model_results"]["composite_success_score"] = json.loads(sr.read_text())
+        integrated = tmp_path / "integrated.json"
+        integrated.write_text(json.dumps(training))
+
+        guide = extract_generation_guide(integrated)
+
+        assert any(s.dimension == "uppercase_ratio" for s in guide.copy_style_directives)
+
     def test_missing_data_levels_dropped(self, reports):
         tr, sr = reports
         guide = extract_generation_guide(tr, sr)

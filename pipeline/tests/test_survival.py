@@ -59,6 +59,12 @@ class TestIdentifyScrapeDates:
         ads = [_ad(str(i), f"2026-01-{i + 1:02d}") for i in range(20)]
         assert identify_scrape_dates(ads, frequency_threshold=0.1) == set()
 
+    def test_small_coincidental_date_cluster_is_not_a_scrape_stamp(self):
+        ads = [_ad(str(i), "2026-01-01") for i in range(2)] + [
+            _ad(str(i), f"2025-12-{i:02d}") for i in range(2, 20)
+        ]
+        assert identify_scrape_dates(ads) == set()
+
 
 class TestBuildSurvivalFrame:
     def test_duration_equals_days_active(self):

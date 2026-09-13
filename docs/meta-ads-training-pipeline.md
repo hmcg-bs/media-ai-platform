@@ -1,8 +1,19 @@
 # Meta Ads Feature Model and Local Training Pipeline
 
 This is the implemented Step 1 → Step 3 local workflow. It is deterministic
-except for the paid Apify scrape and optional Replicate embeddings. No ROAS or
+except for the paid Apify scrape and Replicate vision/embeddings. No ROAS or
 public engagement signal is available for the current commercial-ad corpus.
+
+The complete Supplements workflow is resumable and can be invoked with:
+
+```bash
+uv run python -m pipeline.supplements_workflow
+```
+
+Use `--sample-size 20` for an end-to-end paid pilot. The workflow owns one
+lock, and each corpus, Extraction directory, feature matrix, and report also
+has its own atomic lock/atomic writes. API tokens come only from `get_settings()`
+and are never command-line arguments or artifact fields.
 
 ## Performance proxy
 
@@ -39,11 +50,31 @@ records completed queries in `<out>.state.json`. A restart resumes without
 re-running completed paid queries. One query failure is logged and left
 incomplete so a later invocation retries it.
 
+Each ad retains every discovery `search_queries` match. This is corpus
+provenance used for supplement-subcategory coverage/evaluation, not a model
+input. Older corpora without that field use a documented deterministic
+copy-based subcategory fallback.
+
 Only one process may own a given output path. A second writer fails fast on the
 sidecar lock rather than corrupting a checkpoint. Concurrent jobs are supported
 by choosing different `--out` paths.
 
 ## Feature matrix
+
+Step 2 runs deterministic metadata/color plus Replicate cognitive Extraction:
+
+```bash
+uv run python -m ingestion.run_step2_pipeline \
+  --ads data/supplements_fresh.json \
+  --out out/step2-supplements \
+  --cognitive-provider replicate --skip-ocr --concurrency 4
+```
+
+`--skip-ocr` is explicit because this environment has no GCP ADC. It does not
+fabricate typography/copy-layout values; their missingness remains visible to
+the model. Supply GCP ADC and omit the flag when Cloud Vision OCR is required.
+The output directory is locked to prevent concurrent jobs duplicating paid
+calls, and each ad JSON is atomically published.
 
 ```bash
 uv run python -m pipeline.feature_engineering.build_matrix \
@@ -69,12 +100,27 @@ uv run python -m pipeline.model_training.run_training \
   --workers-per-model 1
 ```
 
-The primary XGBoost attribution model uses an advertiser-group holdout, so a
-Meta page cannot appear in both train and test. Reports include R², MAE, a
+The primary XGBoost attribution model holds out advertisers first seen latest,
+so a Meta page cannot appear in both train and test and the test set better
+represents transfer to new brands under newer trends. The proxy percentile
+calibrator is fitted on training rows only. A second such split within training
+selects XGBoost parameters; the untouched outer test set is evaluated once.
+Reports include R², MAE, a
 median baseline comparison, top-20%-precision, advertiser overlap, SHAP
 attribution, seed, worker count, and SHA-256 hashes of both inputs. Component
 models use an expanding time-series CV. Ads with no `end_date` are retained as
 right-censored observations in the Cox Longevity model.
+
+The report also includes test MAE/calibration by start quarter and supplement
+subcategory, with a minimum-sample gate, plus Kaplan–Meier survival estimates
+at 30/60/90/180 days. `days_to_75pct_survival` and median survival remain null
+when censoring makes them unidentifiable. These are maturity benchmarks, not a
+universal fabricated definition of success.
+
+The final report embeds interpretable Tree SHAP values. Generation reads that
+same report directly and emits `supplements_generation_guide.json`; only
+directionally reliable, renderable features become directives. Embedding
+dimensions, missing-data levels, and campaign-operation fields are excluded.
 
 `--workers-per-model 1` is deliberate: separate jobs can run concurrently
 without each XGBoost process claiming every CPU. Use distinct report paths for
@@ -91,9 +137,11 @@ concurrent experiments; same-path jobs are rejected by the output lock.
   when comparing named brands.
 - Facebook CDN creative URLs expire. Refreshing them requires a successful
   Apify run near use time.
-- The repository records Apify's monthly quota as currently exhausted. Offline
-  tests verify orchestration, but a fresh paid scrape and real-corpus training
-  run remain required before interpreting feature rankings.
+- Search-query cohorts overlap and keyword discovery is not a taxonomy. Treat
+  subcategory comparisons as sensitivity analysis until landing-page product
+  categorization coverage is high.
+- Trend evaluation can reveal calibration drift but cannot establish causality;
+  preserve future collection windows as new untouched tests.
 
 ## Verification
 

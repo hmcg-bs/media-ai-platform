@@ -86,7 +86,9 @@ def scrape_and_normalize(
         client = ApifyClient(api_token=settings.apify_api_token, timeout_s=600)
 
     normalized: list[dict[str, Any]] = list(existing_ads or [])
-    seen_ids: set[str] = {str(ad["ad_archive_id"]) for ad in normalized}
+    ads_by_id: dict[str, dict[str, Any]] = {
+        str(ad["ad_archive_id"]): ad for ad in normalized
+    }
     completed_queries = completed_queries if completed_queries is not None else set()
     normalize_failed = 0
 
@@ -111,12 +113,20 @@ def scrape_and_normalize(
                 normalize_failed += 1
                 logger.warning("fresh_scrape_normalize_failed", query=query, error=str(e))
                 continue
-            if not ad.ad_archive_id or ad.ad_archive_id in seen_ids:
+            if not ad.ad_archive_id:
+                continue
+            if ad.ad_archive_id in ads_by_id:
+                existing = ads_by_id[ad.ad_archive_id]
+                existing["search_queries"] = sorted(
+                    set(existing.get("search_queries", [])) | {query}
+                )
                 continue
             if not ad.image_urls:
                 continue  # Step 2 needs at least one image; skip up front, not silently later.
-            seen_ids.add(ad.ad_archive_id)
-            normalized.append(ad.model_dump(mode="json"))
+            record = ad.model_dump(mode="json")
+            record["search_queries"] = [query]
+            ads_by_id[ad.ad_archive_id] = record
+            normalized.append(record)
         completed_queries.add(query)
         if checkpoint is not None:
             checkpoint(normalized, completed_queries)

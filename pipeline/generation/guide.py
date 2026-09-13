@@ -1,6 +1,6 @@
 """Extracts a structured, interpretable "generation guide" from the already-
 trained Critique models (Cox survival for `days_active`, XGBoost for
-`collation_count`/`variants_featured_count`, and the composite success-score
+`collation_count`, and the composite success-score
 SHAP model) — the concrete answer to "can we extract information from the
 model that can guide image generation."
 
@@ -54,11 +54,15 @@ _MISSING_DATA_LEVELS = {"unknown", "none", "nan", ""}
 _VISUAL_CATEGORICAL_DIMENSIONS = {
     "cta_type", "dominant_color", "hook_framework", "background_style",
     "text_alignment", "contrast_ratio_type", "headline_zone",
+    "product_visual_state", "texture_type", "primary_human_demographic",
+    "primary_human_action", "primary_human_expression", "primary_human_wardrobe",
 }
 _VISUAL_NUMERIC_DIMENSIONS = {
     "cta_present", "palette_vibrancy", "psychological_warmth_index",
     "copy_canvas_coverage", "asset_canvas_coverage",
     "rating",  # whether/how prominently to show a rating badge -- a real creative choice
+    "secondary_prop_count", "object_relationship_count", "texture_visible",
+    "human_presence", "human_model_count", "authority_flag_count",
 }
 _COPY_STYLE_NUMERIC_DIMENSIONS = {
     "uppercase_ratio", "reading_grade_level", "whitespace_ratio",
@@ -211,10 +215,14 @@ def _to_signals(raw: list[dict[str, Any]], bucket: str) -> list[DirectionalSigna
 
 def extract_generation_guide(
     training_report_file: Path = DEFAULT_TRAINING_REPORT,
-    success_score_report_file: Path = DEFAULT_SUCCESS_SCORE_REPORT,
+    success_score_report_file: Path | None = None,
 ) -> GenerationGuide:
     training_report = json.loads(training_report_file.read_text())
-    success_score_report = json.loads(success_score_report_file.read_text())
+    success_score_report = (
+        json.loads(success_score_report_file.read_text())
+        if success_score_report_file is not None
+        else training_report.get("model_results", {}).get("composite_success_score", {})
+    )
 
     all_directional: list[dict[str, Any]] = []
     non_directional_notes: list[str] = []
@@ -244,10 +252,10 @@ def extract_generation_guide(
     all_directional += shap_directional
     non_directional_notes += shap_non_directional
 
-    # collation_count / variants_featured_count: XGBoost feature_importances_
+    # collation_count: XGBoost feature_importances_
     # only -- real "this matters" signal, but no direction. Recorded
     # separately, never asserted a direction they don't have.
-    for target in ("collation_count", "variants_featured_count"):
+    for target in ("collation_count",):
         top_features = (
             training_report.get("model_results", {}).get(target, {})
             .get("without_embeddings", {}).get("top_features", [])

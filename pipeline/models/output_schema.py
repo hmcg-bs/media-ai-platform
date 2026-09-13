@@ -256,6 +256,9 @@ class ExtractionResult(BaseModel):
         """
         cw = self.copywriting_features
         pl = self.placement
+        spatial = self.spatial_and_nested_objects
+        humans = self.human_model_analysis
+        first_human = humans.details[0] if humans.details else HumanDetail()
         return {
             "ad_id": self.ad_id,
             "aspect_ratio": self.technical_metadata.aspect_ratio,
@@ -292,6 +295,20 @@ class ExtractionResult(BaseModel):
             "n_blocks_top": pl.n_blocks_top,
             "n_blocks_middle": pl.n_blocks_middle,
             "n_blocks_bottom": pl.n_blocks_bottom,
+            # cognitive visual representation (bounded scalar/categorical
+            # summaries; raw object names/free text stay out of tabular ML)
+            "product_visual_state": spatial.primary_product.visual_state,
+            "secondary_prop_count": len(spatial.secondary_props),
+            "object_relationship_count": len(spatial.object_relationships),
+            "texture_visible": int(spatial.texture_demonstration.visible),
+            "texture_type": spatial.texture_demonstration.texture_type,
+            "human_presence": int(humans.human_presence),
+            "human_model_count": humans.model_count,
+            "primary_human_demographic": first_human.estimated_demographic,
+            "primary_human_action": first_human.action_performed,
+            "primary_human_expression": first_human.micro_expression,
+            "primary_human_wardrobe": first_human.wardrobe_style,
+            "authority_flag_count": len(self.marketing_psychology.authority_flags),
         }
 
 
