@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 # Fixed-dollar price tiers, matching Phase 1's data-exploration report
@@ -33,25 +34,38 @@ def extract_product_features(
 ) -> dict[str, Any]:
     """Extract product-based features from ProductPage enrichment.
 
-    Deliberately excludes `price` and `product_category` as raw feature-dict
-    keys: price is a segmentation dimension (see calculate_price_tier), and
-    product_category is for segmentation only per the plan's own rule — both
-    are returned separately by the caller (extract_all_features), not mixed
-    into the numeric/categorical feature row itself."""
+    Deliberately excludes raw `price` and `product_category`: raw prices are
+    not comparable across currencies/bundles, while category is a segment.
+    The caller adds the stable categorical price tier to the model row."""
     if not product_page:
         return {
             "rating": None,
+            "rating_count_log1p": None,
+            "has_rating": False,
+            "has_product_description": False,
+            "product_description_word_count": None,
+            "product_usp_word_count": None,
+            "subscription_status": "unknown",
             "shows_all_variants": False,
             "variants_featured_count": 0,
             "cultural_branding_count": 0,
         }
 
     rating = product_page.get("rating")
+    rating_count = product_page.get("rating_count")
+    description = str(product_page.get("marketing_copy") or "").strip()
+    usp = str(product_page.get("usp") or "").strip()
     variants = product_page.get("variants_featured", [])
     cultural_branding = product_page.get("cultural_branding", [])
 
     return {
         "rating": rating,
+        "rating_count_log1p": math.log1p(rating_count) if rating_count is not None else None,
+        "has_rating": rating is not None,
+        "has_product_description": bool(description or usp),
+        "product_description_word_count": len(description.split()) if description else None,
+        "product_usp_word_count": len(usp.split()) if usp else None,
+        "subscription_status": product_page.get("subscription_status") or "unknown",
         "shows_all_variants": product_page.get("shows_all_variants", False),
         "variants_featured_count": len(variants) if variants else 0,
         "cultural_branding_count": len(cultural_branding) if cultural_branding else 0,

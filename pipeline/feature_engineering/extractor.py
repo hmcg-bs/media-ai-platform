@@ -163,8 +163,10 @@ def extract_all_features(
     )
     features.update(color_features)
 
-    # 7. PRODUCT FEATURES (4 features — price/product_category excluded,
-    # both segmentation-only; price_tier computed and returned separately)
+    # 7. PRODUCT FEATURES. Raw price remains excluded because currencies and
+    # bundle sizes are not comparable. The stable tier is returned separately
+    # and preprocessing adds it to X as a categorical feature; product_category
+    # remains segmentation-only.
     product_features = extract_product_features(product_page_raw)
     features.update(product_features)
     price_tier = calculate_price_tier(price)

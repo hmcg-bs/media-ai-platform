@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from pipeline.feature_engineering.product_features import (
     calculate_price_tier,
     extract_product_features,
@@ -61,6 +63,12 @@ class TestExtractProductFeatures:
         features = extract_product_features(None)
         assert features == {
             "rating": None,
+            "rating_count_log1p": None,
+            "has_rating": False,
+            "has_product_description": False,
+            "product_description_word_count": None,
+            "product_usp_word_count": None,
+            "subscription_status": "unknown",
             "shows_all_variants": False,
             "variants_featured_count": 0,
             "cultural_branding_count": 0,
@@ -69,11 +77,19 @@ class TestExtractProductFeatures:
     def test_real_fields_extracted_correctly(self) -> None:
         features = extract_product_features({
             "rating": 4.8,
+            "rating_count": 99,
+            "marketing_copy": "Daily support for calm focus",
+            "usp": "Vegan Non-GMO",
+            "subscription_status": "subscription_optional",
             "shows_all_variants": True,
             "variants_featured": ["Flavor: Vanilla", "Size: 500g"],
             "cultural_branding": ["American Made"],
         })
         assert features["rating"] == 4.8
+        assert round(features["rating_count_log1p"], 5) == round(math.log1p(99), 5)
+        assert features["product_description_word_count"] == 5
+        assert features["product_usp_word_count"] == 2
+        assert features["subscription_status"] == "subscription_optional"
         assert features["shows_all_variants"] is True
         assert features["variants_featured_count"] == 2
         assert features["cultural_branding_count"] == 1

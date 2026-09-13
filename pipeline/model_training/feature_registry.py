@@ -145,6 +145,36 @@ FEATURE_REGISTRY: dict[str, FeatureMeta] = {
         "corpus characteristic (many genuinely well-rated DTC supplement products), "
         "not a pipeline artifact, per this session's earlier rating-bound audit.",
     ),
+    "rating_count_log1p": FeatureMeta(
+        "numeric", "product_features.py::extract_product_features",
+        "Natural-log-transformed landing-page review count.",
+        caveats="None when review volume was not extracted; never default-filled to zero.",
+    ),
+    "has_rating": FeatureMeta(
+        "boolean", "product_features.py::extract_product_features",
+        "Whether a landing-page rating was extracted.",
+    ),
+    "has_product_description": FeatureMeta(
+        "boolean", "product_features.py::extract_product_features",
+        "Whether landing-page description or USP text was extracted.",
+    ),
+    "product_description_word_count": FeatureMeta(
+        "numeric", "product_features.py::extract_product_features",
+        "Word count of structured landing-page marketing copy.",
+        caveats="None when no description was extracted; text itself is not treated as a label.",
+    ),
+    "product_usp_word_count": FeatureMeta(
+        "numeric", "product_features.py::extract_product_features",
+        "Word count of extracted landing-page unique-selling-point text.",
+        caveats="None when no USP was extracted.",
+    ),
+    "subscription_status": FeatureMeta(
+        "categorical", "ingestion.subscription_detector",
+        "Deterministic landing-page subscription availability classification.",
+        caveats=(
+            "'unknown' means no supported signature was found, not proof of one-time-only sales."
+        ),
+    ),
     "shows_all_variants": FeatureMeta(
         "boolean", "product_features.py",
         "Whether the landing page shows more than one product variant "

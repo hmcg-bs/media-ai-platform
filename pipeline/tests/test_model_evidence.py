@@ -57,6 +57,7 @@ def test_promotion_fails_closed_when_taxonomy_or_confidence_is_missing():
         result,
         {"git_worktree_dirty": False},
         {"status": "failed"},
+        {"status": "passed"},
     )
     assert decision["status"] == "blocked"
     assert decision["failed_checks"] == ["taxonomy_adjudication_passed"]
@@ -78,9 +79,32 @@ def test_promotion_passes_only_when_every_objective_gate_passes():
         result,
         {"git_worktree_dirty": False},
         {"status": "passed"},
+        {"status": "passed"},
     )
     assert decision["status"] == "promoted"
     assert all(decision["checks"].values())
+
+
+def test_promotion_blocks_when_product_enrichment_is_unverified():
+    result = {
+        "n_test": 100,
+        "n_test_advertisers": 10,
+        "advertiser_overlap": 0,
+        "test_mae": 0.3,
+        "baseline_mae": 0.4,
+        "uncertainty": {
+            "mae_difference_confidence_interval_95": [-0.2, -0.01],
+            "top_20pct_precision_confidence_interval_95": [0.25, 0.5],
+        },
+    }
+    decision = build_promotion_decision(
+        result,
+        {"git_worktree_dirty": False},
+        {"status": "passed"},
+        {"status": "failed"},
+    )
+    assert decision["status"] == "blocked"
+    assert decision["failed_checks"] == ["product_enrichment_passed"]
 
 
 def test_training_taxonomy_gate_rejects_unreviewed_ads():

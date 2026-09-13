@@ -112,6 +112,10 @@ _NON_VISUAL_EXCLUDED_DIMENSIONS = {
 # A business/positioning fact worth keeping as *context* for the guide
 # (e.g. "for a budget-tier product...") -- never a rendered visual element.
 _POSITIONING_CONTEXT_DIMENSIONS = {"price_tier"}
+_PRODUCT_EVIDENCE_DIMENSIONS = {
+    "rating": "rating",
+    "price_tier": "price",
+}
 
 
 class DirectionalSignal(BaseModel):
@@ -307,6 +311,27 @@ def extract_generation_guide(
     )
     all_directional += shap_directional
     non_directional_notes += shap_non_directional
+
+    # New reports bind landing-page coverage. A sparse product field must not
+    # become creative guidance merely because the model can impute it. Older
+    # immutable reports (including v3) have no such gate and retain their
+    # frozen behavior.
+    product_gate = training_report.get("product_enrichment_gate")
+    if product_gate is not None:
+        fields = product_gate.get("fields", {})
+        unsupported = {
+            dimension
+            for dimension, field in _PRODUCT_EVIDENCE_DIMENSIONS.items()
+            if not (fields.get(field) or {}).get("model_support", False)
+        }
+        if unsupported:
+            all_directional = [
+                signal for signal in all_directional if signal["dimension"] not in unsupported
+            ]
+            excluded_notes.append(
+                "Dropped product-derived directives without the fixed row/advertiser "
+                f"support gate: {', '.join(sorted(unsupported))}."
+            )
 
     # collation_count: XGBoost feature_importances_
     # only -- real "this matters" signal, but no direction. Recorded

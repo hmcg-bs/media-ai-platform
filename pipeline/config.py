@@ -6,6 +6,7 @@ hardcoded GCP identifiers anywhere else in the codebase.
 
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -172,7 +173,13 @@ class Settings(BaseSettings):
     # Also the only source for rating/rating_count at scale — Shopify's core
     # product.json schema has no review fields; those come from third-party
     # widgets (Loox/Yotpo/Judge.me) injected client-side.
-    zenrows_api_key: str = ""
+    # Accept the historical documented name and the shorter Amp project
+    # variable the owner provisioned. Secret access still stays centralized
+    # here; no caller reads environment variables directly.
+    zenrows_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("ZENROWS_API_KEY", "ZENROWS_API"),
+    )
     zenrows_concurrency: int = 5
     zenrows_retries: int = 2
     zenrows_js_render: bool = True
@@ -186,6 +193,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        populate_by_name=True,
     )
 
 

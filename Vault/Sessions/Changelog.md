@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Paired-bootstrap model uncertainty, raw-feature drift, and objective promotion decisions
 - Immutable collection windows and old-model-first future-window evaluation
 - Atomic, hash-verified Meta-to-Generation handoff bundles with an exact v3 freeze
+- Taxonomy-gated, restartable product-site enrichment with a versioned coverage/provenance report
+- Product context features for review volume, description/USP coverage, and subscription status
 
 ### Changed
 - Aligned the competitor-ad Performance proxy to Longevity weighted by page-level Scaling with a Meta collation Variant boost
@@ -49,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Supplements training now fails closed before fitting unless every input ad carries one coherent,
   content-bound human taxonomy provenance version
 - Adjudicated product subcategory now takes precedence over keyword and landing-page heuristics
+- Model promotion and product-derived generation directives now require product enrichment evidence
 
 ### Fixed
 - Prevented same-advertiser train/test leakage and same-output concurrent job corruption
@@ -64,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   requiring bucket metadata access
 - Prevented mutable review thresholds, tampered temporal-window eligibility, stale future proxy
   targets, and elapsed wall time from creating false taxonomy/trend evidence
+- Prevented concurrent landing-page checkpoints/diagnostics from colliding or publishing partial data
 
 ### Removed
 - Target-derived cluster trend features from the default training CLI because their in-sample encoding leaked outcomes

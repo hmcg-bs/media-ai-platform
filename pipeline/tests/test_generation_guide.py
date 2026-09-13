@@ -146,6 +146,29 @@ class TestExtractGenerationGuide:
         assert len(matches) == 1
         assert matches[0].direction == "higher_is_better"
 
+    def test_product_directive_requires_row_and_advertiser_support(
+        self, reports, tmp_path: Path
+    ):
+        tr, sr = reports
+        training = json.loads(tr.read_text())
+        training["product_enrichment_gate"] = {
+            "fields": {
+                "rating": {"model_support": False},
+                "price": {"model_support": True},
+            }
+        }
+        success = json.loads(sr.read_text())
+        rating = success["without_embeddings"]["top_features_by_shap"][1]
+        rating["mean_signed_shap"] = 0.04
+        gated = tmp_path / "gated.json"
+        gated.write_text(json.dumps(training))
+        success_path = tmp_path / "success.json"
+        success_path.write_text(json.dumps(success))
+        guide = extract_generation_guide(gated, success_path)
+
+        assert not any(signal.dimension == "rating" for signal in guide.visual_directives)
+        assert any("rating" in note and "support gate" in note for note in guide.excluded_notes)
+
     def test_raw_embedding_dimension_never_surfaces_anywhere(self, reports):
         tr, sr = reports
         guide = extract_generation_guide(tr, sr)

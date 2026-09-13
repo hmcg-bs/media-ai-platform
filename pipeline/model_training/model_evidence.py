@@ -165,6 +165,7 @@ def build_promotion_decision(
     without_embeddings: dict[str, Any],
     run_manifest: dict[str, Any],
     taxonomy_gate: dict[str, Any],
+    product_enrichment_gate: dict[str, Any],
 ) -> dict[str, Any]:
     """Apply M0/M1/M3 release gates without hiding failed conditions."""
     uncertainty = without_embeddings.get("uncertainty", {})
@@ -175,6 +176,7 @@ def build_promotion_decision(
     ]
     checks = {
         "taxonomy_adjudication_passed": taxonomy_gate.get("status") == "passed",
+        "product_enrichment_passed": product_enrichment_gate.get("status") == "passed",
         "git_worktree_clean": run_manifest.get("git_worktree_dirty") is False,
         "advertiser_overlap_zero": without_embeddings.get("advertiser_overlap") == 0,
         "holdout_rows_at_least_100": without_embeddings.get("n_test", 0) >= 100,

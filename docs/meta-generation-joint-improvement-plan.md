@@ -504,3 +504,23 @@ manifest remains immutable. These are workflow evidence, not completed human rev
 evidence. M1 is blocked on human labels; future-window evaluation is blocked on a genuinely
 later scrape with mature targets; survival remains blocked on sufficient observed endings; and B0
 remains blocked on rights and craft approval.
+
+### Product-site evidence boundary (2026-09-13)
+
+- The Supplements workflow now places landing-page enrichment after human taxonomy approval and
+  before Step 2/matrix/training. It runs the free Shopify/structured tier first, then ZenRows once
+  per unresolved unique URL, with atomic checkpoints, output locks, and resume support. The paid LLM
+  advertorial fallback remains a separate explicit decision.
+- `ZENROWS_API_KEY` and the owner-provisioned `ZENROWS_API` alias are accepted only through
+  `pipeline.config`; neither the key nor request credentials enter commands, reports, or logs.
+- A versioned `product-enrichment-coverage-v1` report hashes the exact approved enriched corpus and
+  fails training below fixed product-page/price/description coverage. Per-field evidence needs at
+  least 100 rows and 10 advertisers before it is considered model-supported.
+- The matrix uses categorical price tier, rating, log review volume, description/USP presence and
+  lengths, subscription status, and existing variant/cultural signals. Missing extraction remains
+  explicit. Product features are X-axis context only; generated outputs and landing-page metadata
+  are never proxy outcomes.
+- Future generation reports may carry this gate, but rating or price-tier directives are removed
+  unless their field-specific row/advertiser support passes. Frozen v3 has no product gate and is
+  unchanged. No v4 handoff or model-performance claim exists until human taxonomy labels, a real
+  enrichment run, and untouched temporal evaluation exist.

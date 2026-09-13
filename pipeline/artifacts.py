@@ -59,3 +59,19 @@ def atomic_write_json(path: Path, value: Any) -> None:
     except BaseException:
         tmp_path.unlink(missing_ok=True)
         raise
+
+
+def atomic_write_text(path: Path, value: str) -> None:
+    """Durably publish UTF-8 text without exposing a partial file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp_file:
+            tmp_file.write(value)
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())
+        tmp_path.replace(path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise

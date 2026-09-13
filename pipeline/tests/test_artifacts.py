@@ -4,7 +4,12 @@ import json
 
 import pytest
 
-from pipeline.artifacts import OutputLockedError, atomic_write_json, exclusive_output
+from pipeline.artifacts import (
+    OutputLockedError,
+    atomic_write_json,
+    atomic_write_text,
+    exclusive_output,
+)
 
 
 def test_atomic_write_json_replaces_complete_document(tmp_path):
@@ -12,6 +17,12 @@ def test_atomic_write_json_replaces_complete_document(tmp_path):
     output.write_text('{"old": true}')
     atomic_write_json(output, {"rows": [1, 2, 3]})
     assert json.loads(output.read_text()) == {"rows": [1, 2, 3]}
+
+
+def test_atomic_write_text_replaces_complete_document(tmp_path):
+    output = tmp_path / "diagnostics.csv"
+    atomic_write_text(output, "url,status\nhttps://example.com,ok\n")
+    assert output.read_text() == "url,status\nhttps://example.com,ok\n"
     assert list(tmp_path.glob("*.tmp")) == []
 
 

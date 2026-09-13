@@ -14,11 +14,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
 from ingestion.landing_page_scraper import extract_product_page, scrape_landing_page
 from ingestion.models import CompetitorAd
+from pipeline.artifacts import atomic_write_json, exclusive_output
 from pipeline.logger import get_logger
 
 logger = get_logger(__name__)
@@ -111,9 +113,7 @@ def enrich_corpus(ads_file: Path, output_file: Path, use_llm: bool = True) -> in
         )
 
     # Write enriched corpus
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_file, "w") as f:
-        json.dump(enriched_ads, f, indent=2, default=str)
+    atomic_write_json(output_file, enriched_ads)
 
     enriched_count = sum(
         1
@@ -224,8 +224,7 @@ def enrich_corpus_parallel(
 
     def checkpoint_locked() -> None:
         if checkpoint_path and (completed % checkpoint_every == 0):
-            with open(checkpoint_path, "w") as f:
-                json.dump([r for r in results if r is not None], f, indent=2, default=str)
+            atomic_write_json(checkpoint_path, [r for r in results if r is not None])
 
     def task(i: int, ad_dict: dict) -> tuple[int, dict]:
         archive_id = ad_dict.get("ad_archive_id")
@@ -243,9 +242,7 @@ def enrich_corpus_parallel(
                 print(f"  Enriched {completed}/{len(ads_data)}...", end="\r")
                 checkpoint_locked()
 
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_file, "w") as f:
-        json.dump(results, f, indent=2, default=str)
+    atomic_write_json(output_file, results)
 
     enriched_count = sum(
         1 for ad in results if isinstance(ad, dict) and ad.get("product_page") is not None
@@ -336,8 +333,7 @@ def enrich_corpus_parallel_tiered(
 
     def checkpoint_locked() -> None:
         if checkpoint_path and (completed % checkpoint_every == 0):
-            with open(checkpoint_path, "w") as f:
-                json.dump([r for r in results if r is not None], f, indent=2, default=str)
+            atomic_write_json(checkpoint_path, [r for r in results if r is not None])
 
     # Validate all ads up front and bucket indices by link_url.
     validated: dict[int, CompetitorAd] = {}
@@ -414,9 +410,7 @@ def enrich_corpus_parallel_tiered(
             link_url, product_page_dict = fut.result()
             fan_out(link_url, product_page_dict)
 
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_file, "w") as f:
-        json.dump(results, f, indent=2, default=str)
+    atomic_write_json(output_file, results)
 
     enriched_count = sum(
         1 for ad in results if isinstance(ad, dict) and ad.get("product_page") is not None
@@ -547,12 +541,9 @@ def enrich_corpus_zenrows(
         print(f"  ZenRows processed {processed}/{len(target_urls)} URLs...", end="\r")
 
         if checkpoint_path:
-            with open(checkpoint_path, "w") as f:
-                json.dump(results, f, indent=2, default=str)
+            atomic_write_json(checkpoint_path, results)
 
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_file, "w") as f:
-        json.dump(results, f, indent=2, default=str)
+    atomic_write_json(output_file, results)
 
     if diagnostics_csv and all_fetch_results:
         write_diagnostics(all_fetch_results, diagnostics_csv)
@@ -845,12 +836,9 @@ def enrich_corpus_advertorial_fallback(
         )
 
         if checkpoint_path:
-            with open(checkpoint_path, "w") as f:
-                json.dump(results, f, indent=2, default=str)
+            atomic_write_json(checkpoint_path, results)
 
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_file, "w") as f:
-        json.dump(results, f, indent=2, default=str)
+    atomic_write_json(output_file, results)
 
     enriched_count = sum(1 for r in results if isinstance(r, dict) and r.get("product_page"))
     print(
@@ -941,46 +929,61 @@ def main() -> int:
     )
 
     args = parser.parse_args()
-    if args.advertorial_fallback:
-        if not args.diagnostics_csv:
-            parser.error(
-                "--advertorial-fallback requires --diagnostics-csv "
-                "(the prior --zenrows run's diagnostics CSV to read failed URLs from)"
-            )
-        return enrich_corpus_advertorial_fallback(
-            Path(args.ads),
-            Path(args.out),
-            diagnostics_csv=Path(args.diagnostics_csv),
-            checkpoint_path=Path(args.out),
-            resume=args.resume,
-        )
+    if args.workers < 1:
+        parser.error("--workers must be at least 1")
+    if args.zenrows and args.advertorial_fallback:
+        parser.error("--zenrows and --advertorial-fallback are mutually exclusive")
     if args.zenrows:
-        return enrich_corpus_zenrows(
-            Path(args.ads),
-            Path(args.out),
-            checkpoint_path=Path(args.out),
-            resume=args.resume,
-            diagnostics_csv=Path(args.diagnostics_csv) if args.diagnostics_csv else None,
-        )
-    if args.workers > 1 and args.tiered:
-        return enrich_corpus_parallel_tiered(
-            Path(args.ads),
-            Path(args.out),
-            use_llm=not args.no_llm,
-            max_workers=args.workers,
-            checkpoint_path=Path(args.out),
-            resume=args.resume,
-        )
-    if args.workers > 1:
-        return enrich_corpus_parallel(
-            Path(args.ads),
-            Path(args.out),
-            use_llm=not args.no_llm,
-            max_workers=args.workers,
-            checkpoint_path=Path(args.out),
-            resume=args.resume,
-        )
-    return enrich_corpus(Path(args.ads), Path(args.out), use_llm=not args.no_llm)
+        from pipeline.config import get_settings
+
+        if not get_settings().zenrows_api_key:
+            parser.error("--zenrows requires ZENROWS_API_KEY or ZENROWS_API")
+
+    output = Path(args.out)
+    with ExitStack() as locks:
+        locks.enter_context(exclusive_output(output))
+        if args.zenrows and args.diagnostics_csv:
+            locks.enter_context(exclusive_output(Path(args.diagnostics_csv)))
+        if args.advertorial_fallback:
+            if not args.diagnostics_csv:
+                parser.error(
+                    "--advertorial-fallback requires --diagnostics-csv "
+                    "(the prior --zenrows run's diagnostics CSV to read failed URLs from)"
+                )
+            return enrich_corpus_advertorial_fallback(
+                Path(args.ads),
+                output,
+                diagnostics_csv=Path(args.diagnostics_csv),
+                checkpoint_path=output,
+                resume=args.resume,
+            )
+        if args.zenrows:
+            return enrich_corpus_zenrows(
+                Path(args.ads),
+                output,
+                checkpoint_path=output,
+                resume=args.resume,
+                diagnostics_csv=Path(args.diagnostics_csv) if args.diagnostics_csv else None,
+            )
+        if args.workers > 1 and args.tiered:
+            return enrich_corpus_parallel_tiered(
+                Path(args.ads),
+                output,
+                use_llm=not args.no_llm,
+                max_workers=args.workers,
+                checkpoint_path=output,
+                resume=args.resume,
+            )
+        if args.workers > 1:
+            return enrich_corpus_parallel(
+                Path(args.ads),
+                output,
+                use_llm=not args.no_llm,
+                max_workers=args.workers,
+                checkpoint_path=output,
+                resume=args.resume,
+            )
+        return enrich_corpus(Path(args.ads), output, use_llm=not args.no_llm)
 
 
 if __name__ == "__main__":

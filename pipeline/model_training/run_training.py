@@ -32,6 +32,7 @@ from pipeline.model_training.survival import (
     identify_scrape_dates,
 )
 from pipeline.model_training.trainer import print_results, train_and_evaluate
+from pipeline.validation.product_enrichment import build_product_enrichment_report
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
 DEFAULT_MATRIX_FILE = DATA_DIR / "feature_matrix.json"
@@ -146,6 +147,12 @@ def run(
         raise ValueError(
             "training ads did not pass the human taxonomy gate: "
             + "; ".join(taxonomy_gate["failures"][:5])
+        )
+    product_enrichment_gate = build_product_enrichment_report(ads)
+    if product_enrichment_gate["status"] != "passed":
+        raise ValueError(
+            "training ads did not pass the product enrichment gate: "
+            + "; ".join(product_enrichment_gate["failures"][:5])
         )
 
     quality_report = build_quality_report(rows)
@@ -273,11 +280,13 @@ def run(
         without_embeddings,
         run_manifest,
         taxonomy_gate,
+        product_enrichment_gate,
     )
     report = {
         "report_schema_version": REPORT_SCHEMA_VERSION,
         "run_manifest": run_manifest,
         "taxonomy_gate": taxonomy_gate,
+        "product_enrichment_gate": product_enrichment_gate,
         "promotion_decision": promotion_decision,
         "quality_report": {
             "columns": quality_report["columns"],

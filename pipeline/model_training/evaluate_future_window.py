@@ -174,6 +174,7 @@ def evaluate_future_window(
             result,
             {"git_worktree_dirty": manifest.get("git_worktree_dirty")},
             taxonomy_gate,
+            baseline_report.get("product_enrichment_gate", {"status": "failed"}),
         )
     elif not best_parameters:
         failures.append("baseline report has no frozen no-embedding parameters")

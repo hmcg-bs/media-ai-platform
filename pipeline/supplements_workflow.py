@@ -17,6 +17,7 @@ from pathlib import Path
 from pipeline.artifacts import atomic_write_json, exclusive_output
 from pipeline.generation.guide import extract_generation_guide
 from pipeline.validation.phase0_validator import apply_manual_taxonomy_gate
+from pipeline.validation.product_enrichment import build_product_enrichment_report
 from pipeline.validation.taxonomy_adjudication import verify_approved_taxonomy
 
 
@@ -58,6 +59,28 @@ def main() -> None:
         type=Path,
         default=Path("data/supplements_taxonomy_approved.json"),
     )
+    parser.add_argument(
+        "--product-enriched-ads",
+        type=Path,
+        default=Path("data/supplements_taxonomy_approved_product_enriched.json"),
+        help="Restartable, taxonomy-approved corpus enriched from product sites.",
+    )
+    parser.add_argument(
+        "--product-enrichment-report",
+        type=Path,
+        default=Path("data/supplements_product_enrichment_report.json"),
+    )
+    parser.add_argument(
+        "--product-enrichment-diagnostics",
+        type=Path,
+        default=Path("data/supplements_product_enrichment_zenrows.csv"),
+    )
+    parser.add_argument("--product-enrichment-workers", type=int, default=4)
+    parser.add_argument(
+        "--skip-product-enrichment",
+        action="store_true",
+        help="Reuse and validate --product-enriched-ads without making product-site calls.",
+    )
     parser.add_argument("--sync-gcp", action="store_true")
     parser.add_argument("--bigquery-dataset")
     parser.add_argument(
@@ -69,10 +92,16 @@ def main() -> None:
 
     if args.concurrency < 1:
         parser.error("--concurrency must be at least 1")
+    if args.product_enrichment_workers < 1:
+        parser.error("--product-enrichment-workers must be at least 1")
     if args.skip_ocr and args.reprocess_ocr:
         parser.error("--skip-ocr and --reprocess-ocr cannot be used together")
     lock_target = args.report.with_suffix(args.report.suffix + ".workflow")
-    with exclusive_output(lock_target), exclusive_output(args.taxonomy_approved_ads):
+    with (
+        exclusive_output(lock_target),
+        exclusive_output(args.taxonomy_approved_ads),
+        exclusive_output(args.product_enrichment_report),
+    ):
         if not args.skip_scrape:
             _run_module("ingestion.fresh_corpus_scrape", "--out", str(args.ads))
         if not args.ads.exists():
@@ -95,6 +124,57 @@ def main() -> None:
         atomic_write_json(args.taxonomy_approved_ads, approved)
         workflow_ads = args.taxonomy_approved_ads
         print(f"Manual taxonomy gate: {counts}; approved={workflow_ads}")
+
+        if not args.skip_product_enrichment:
+            # First collect structured Shopify/HTML evidence without an LLM;
+            # then use paid JS-rendered ZenRows only as the resilient backfill.
+            # Each subprocess owns and atomically checkpoints the output.
+            _run_module(
+                "ingestion.enrich_with_product_pages",
+                "--ads",
+                str(workflow_ads),
+                "--out",
+                str(args.product_enriched_ads),
+                "--workers",
+                str(args.product_enrichment_workers),
+                "--tiered",
+                "--no-llm",
+                "--resume",
+            )
+            _run_module(
+                "ingestion.enrich_with_product_pages",
+                "--ads",
+                str(args.product_enriched_ads),
+                "--out",
+                str(args.product_enriched_ads),
+                "--zenrows",
+                "--resume",
+                "--diagnostics-csv",
+                str(args.product_enrichment_diagnostics),
+            )
+        if not args.product_enriched_ads.exists():
+            parser.error(f"product-enriched corpus not found: {args.product_enriched_ads}")
+        enriched_ads = json.loads(args.product_enriched_ads.read_text())
+        approved_ids = {str(ad.get("ad_archive_id")) for ad in approved}
+        enriched_ids = {str(ad.get("ad_archive_id")) for ad in enriched_ads}
+        if len(enriched_ads) != len(approved) or enriched_ids != approved_ids:
+            parser.error(
+                "product-enriched corpus does not match the current taxonomy-approved corpus; "
+                "rerun without --skip-product-enrichment"
+            )
+        enrichment_report = build_product_enrichment_report(enriched_ads)
+        atomic_write_json(args.product_enrichment_report, enrichment_report)
+        if enrichment_report["status"] != "passed":
+            parser.error(
+                "product enrichment coverage gate failed: "
+                + "; ".join(enrichment_report["failures"][:5])
+            )
+        workflow_ads = args.product_enriched_ads
+        print(
+            "Product enrichment gate passed: "
+            f"linked={enrichment_report['n_linked_ads']} "
+            f"methods={enrichment_report['extraction_methods']}"
+        )
 
         sample_args = ["--sample-size", str(args.sample_size)] if args.sample_size else []
         if not args.skip_extraction:
@@ -144,7 +224,7 @@ def main() -> None:
             _run_module(
                 "ingestion.sync_gcp",
                 "--ads",
-                str(args.ads),
+                str(workflow_ads),
                 "--step2-out",
                 str(args.step2_out),
                 "--matrix",

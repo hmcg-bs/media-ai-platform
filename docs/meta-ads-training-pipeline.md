@@ -5,7 +5,8 @@ except for the paid Apify scrape and Replicate vision/embeddings. No ROAS or
 public engagement signal is available for the current commercial-ad corpus.
 
 The complete Supplements workflow is resumable and requires a passing human-taxonomy report bound
-to the approved labels:
+to the approved labels. It then runs a free structured landing-page pass followed by a paid ZenRows
+JS-rendered backfill before creative extraction and training:
 
 ```bash
 uv run python -m pipeline.supplements_workflow \
@@ -17,6 +18,18 @@ Use `--sample-size 20` for an end-to-end paid pilot. The workflow owns one
 lock, and each corpus, Extraction directory, feature matrix, and report also
 has its own atomic lock/atomic writes. API tokens come only from `get_settings()`
 and are never command-line arguments or artifact fields.
+
+ZenRows accepts the canonical `ZENROWS_API_KEY` setting and the Amp-project alias `ZENROWS_API`.
+The setting must be visible inside the orb before a paid pass starts. `--skip-product-enrichment`
+does not bypass evidence: it reuses `--product-enriched-ads`, verifies that its exact ad-ID set
+matches the current taxonomy-approved corpus, and reapplies the fixed coverage gate. The workflow
+does not automatically run the separate LLM advertorial fallback.
+
+The product gate requires at least 50% of linked approved ads to have a product-page record, 40% to
+have price, and 25% to have description or USP. It also records row and advertiser support for
+price, rating, rating count, description, and variants; a product field is model-supported only at
+100 rows and 10 advertisers. Missing values remain missing rather than becoming zero. The report is
+bound to canonical ad content by SHA-256 and is embedded in the training report and promotion gate.
 
 ## Performance proxy
 
@@ -96,6 +109,10 @@ The matrix carries `page_id` for grouped evaluation and
 `brand_scaling_count` for the proxy, but both are excluded from model inputs.
 `has_product_page` and `has_step2_features`, plus numeric missing-value
 indicators, distinguish absent extraction stages from genuine zero values.
+Landing-page inputs include categorical price tier (raw cross-currency price remains excluded),
+rating, log review count, description/USP lengths and availability, subscription status, variant
+count, and cultural-branding count. Product text and reviewer counts are explanatory X features,
+never Meta success labels.
 Existing checkpoints are schema-refreshed with page/scaling metadata on resume.
 Use `--skip-embeddings` when Replicate embedding capacity is unavailable; the
 matrix records empty embedding vectors, training omits the embedding ablation,
@@ -106,7 +123,7 @@ and the deterministic/cognitive feature model remains fully evaluable.
 ```bash
 uv run python -m pipeline.model_training.run_training \
   --matrix data/feature_matrix_fresh.json \
-  --ads data/supplements_fresh.json \
+  --ads data/supplements_taxonomy_approved_product_enriched.json \
   --report data/model_training_report_fresh.json \
   --random-state 42 \
   --workers-per-model 1

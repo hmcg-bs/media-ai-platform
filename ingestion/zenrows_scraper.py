@@ -1163,8 +1163,9 @@ def write_diagnostics(
     csv_path: Path,
     json_path: Path | None = None,
 ) -> None:
+    from pipeline.artifacts import atomic_write_json, atomic_write_text
+
     df = results_to_dataframe(results)
-    df.to_csv(csv_path, index=False)
+    atomic_write_text(csv_path, df.to_csv(index=False))
     if json_path:
-        with open(json_path, "w") as f:
-            json.dump(summarize(results), f, indent=2)
+        atomic_write_json(json_path, summarize(results))
