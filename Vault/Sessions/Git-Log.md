@@ -32,3 +32,4 @@ Detailed commit history with dates, branches, and descriptions.
 | 2026-09-13 | auto/meta-ads-model-pipeline | b400eb6 | Add clustered model evidence and proxy sensitivity |
 | 2026-09-13 | auto/meta-ads-model-pipeline | a52317e | Record pre-taxonomy proxy sensitivity diagnostic |
 | 2026-09-13 | auto/meta-ads-model-pipeline | 2a4c460 | Scale taxonomy through validated classifier admission |
+| 2026-09-13 | master | 618ff2d | Ship refactored Meta model/data pipeline |
