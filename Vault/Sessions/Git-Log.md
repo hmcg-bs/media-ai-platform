@@ -28,3 +28,4 @@ Detailed commit history with dates, branches, and descriptions.
 | 2026-09-12 | auto/meta-ads-model-pipeline | f07b636 | Document evidence-gated Meta workflow |
 | 2026-09-12 | auto/meta-ads-model-pipeline | 998a356 | Align v3 bundle paths with generation consumer |
 | 2026-09-13 | auto/meta-ads-model-pipeline | 26d6133 | Restore gated product-site model enrichment |
+| 2026-09-13 | auto/meta-ads-model-pipeline | 0a6fcbb | Document research evidence audit and test plan |
