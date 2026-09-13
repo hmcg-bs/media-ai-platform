@@ -36,6 +36,10 @@ only from Meta Ad Library signals: **Longevity** as the base, **weighted by**
 brand **Scaling**, and boosted by **Variant** count. Engagement (likes/shares) is
 *not* exposed by the Ad Library and is excluded. ROAS is a Phase-2 concept.
 Performance joins to Creative Features in Step 3, never inside Extraction.
+The implemented v1 composite is bounded and rank-based: 70% Longevity + 20%
+Longevity×Scaling + a 10% Variant boost. Scaling is the count of captured ads
+per known Meta Page ID; Variant is Meta's `collation_count`, not the number of
+SKUs or bundles found on the destination page.
 _Avoid_: Score, success, results.
 
 **Longevity** (`days_active`):

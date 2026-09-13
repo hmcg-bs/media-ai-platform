@@ -159,6 +159,8 @@ def extract_all_features(
     features.update({
         "days_active": ad.get("days_active", 0),
         "collation_count": ad.get("collation_count", 0),
+        "has_product_page": isinstance(product_page_raw, dict),
+        "has_step2_features": bool(creative_features),
     })
 
     # 9. PLATFORM FEATURES (1 feature)

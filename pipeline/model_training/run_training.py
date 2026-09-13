@@ -1,7 +1,6 @@
-"""CLI orchestrator: load the feature matrix -> data-quality report ->
-time-based split -> category-trend feature injection -> train+evaluate per
-target variable. `days_active` uses censored Cox survival analysis (see
-survival.py for why); `collation_count`/`variants_featured_count` use plain
+"""CLI orchestrator: load the feature matrix, audit quality, fit the primary
+composite-proxy attribution model, then evaluate the component signals.
+``days_active`` uses censored Cox survival analysis; ``collation_count`` uses
 XGBoost regression with an embeddings-in/embeddings-out ablation.
 
     uv run python -m pipeline.model_training.run_training
@@ -9,11 +8,12 @@ XGBoost regression with an embeddings-in/embeddings-out ablation.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
-from pipeline.model_training.category_trends import TREND_FEATURE_NAMES, EmbeddingClusterTrends
+from pipeline.artifacts import atomic_write_json, exclusive_output
 from pipeline.model_training.data_quality import build_quality_report, print_quality_report
 from pipeline.model_training.preprocessing import (
     build_preprocessor,
@@ -21,6 +21,7 @@ from pipeline.model_training.preprocessing import (
     load_start_dates,
     time_based_split,
 )
+from pipeline.model_training.success_score import train_and_explain
 from pipeline.model_training.survival import (
     build_survival_xy,
     drop_zero_variance_columns,
@@ -34,23 +35,24 @@ DEFAULT_MATRIX_FILE = DATA_DIR / "feature_matrix.json"
 DEFAULT_ADS_FILE = DATA_DIR / "supplements_enriched.json"
 DEFAULT_REPORT_FILE = DATA_DIR / "model_training_report.json"
 
-REGRESSION_TARGETS = ("collation_count", "variants_featured_count")
+REGRESSION_TARGETS = ("collation_count",)
 
 
-def _add_cluster_trend_features(
-    rows: list[dict[str, Any]], trends: EmbeddingClusterTrends
-) -> list[dict[str, Any]]:
-    """Returns new row dicts (originals untouched) with cluster-trend
-    features merged in as plain top-level keys, so build_xy picks them up
-    like any other numeric column with no special-casing."""
-    trend_values = trends.transform(rows)
-    return [{**row, **tv} for row, tv in zip(rows, trend_values, strict=True)]
+def _sha256(path: Path) -> str:
+    """Hash an input without loading a second copy into memory."""
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def run(
     matrix_file: Path = DEFAULT_MATRIX_FILE,
     ads_file: Path = DEFAULT_ADS_FILE,
     report_file: Path = DEFAULT_REPORT_FILE,
+    random_state: int = 42,
+    n_jobs: int = 1,
 ) -> dict[str, Any]:
     rows = json.loads(matrix_file.read_text())
     ads = json.loads(ads_file.read_text())
@@ -66,18 +68,26 @@ def run(
         f"({dropped} rows dropped, no start_date match)"
     )
 
-    # Category-trend / pattern-transfer features: fit strictly on train,
-    # transform both splits against that fit -- see category_trends.py.
-    # Train rows' own target value contributes to their own cluster's mean
-    # (standard target-encoding practice, not fixed here); test rows never
-    # see any test-set outcome, which is what keeps the reported test
-    # metrics honest.
-    trends = EmbeddingClusterTrends().fit(train_rows)
-    train_rows = _add_cluster_trend_features(train_rows, trends)
-    test_rows = _add_cluster_trend_features(test_rows, trends)
-    print(f"Category-trend features added: {TREND_FEATURE_NAMES}")
-
     model_results: dict[str, dict[str, Any]] = {}
+
+    # Primary question: which creative features distinguish top ads under the
+    # project's complete Longevity × Scaling + Variant proxy? Keep this on raw
+    # rows so target-derived cluster summaries cannot leak into the label fit.
+    model_results["composite_success_score"] = {}
+    for label, include_embeddings in (("with_embeddings", True), ("without_embeddings", False)):
+        composite = train_and_explain(
+            rows,
+            include_embeddings=include_embeddings,
+            random_state=random_state,
+            n_jobs=n_jobs,
+        )
+        model_results["composite_success_score"][label] = composite
+        print(f"\n=== composite_success_score ({label}) ===")
+        print(
+            f"  split={composite['split_strategy']} advertiser_overlap="
+            f"{composite['advertiser_overlap']} top-20%-precision="
+            f"{composite['top_20pct_precision']}"
+        )
 
     # --- days_active: censored survival analysis (see survival.py) ---
     X_train, duration_train, event_train = build_survival_xy(train_rows, ads)
@@ -106,7 +116,10 @@ def run(
         f"{survival_results['n_events_observed_test']}/{survival_results['n_test']} test "
         "(rest right-censored, still running or unknown at scrape time)"
     )
-    print(f"  concordance index: {survival_results['concordance_index']} (0.5=random, 1.0=perfect)")
+    print(
+        f"  concordance index: {survival_results['concordance_index']} "
+        f"(status={survival_results['evaluation_status']}; 0.5=random, 1.0=perfect)"
+    )
     print("  top covariates (by |coefficient|):")
     for name, coef in survival_results["top_covariates"][:10]:
         print(f"    {coef:+.4f}  {name}")
@@ -122,11 +135,19 @@ def run(
                 print(f"\n=== {target} ({label}) === skipped, too few labeled rows "
                       f"(train={len(y_tr)}, test={len(y_te)})")
                 continue
-            results = train_and_evaluate(X_tr, y_tr, X_te, y_te)
+            results = train_and_evaluate(X_tr, y_tr, X_te, y_te, n_jobs=n_jobs)
             print_results(target, label, results)
             model_results[target][label] = results
 
     report = {
+        "run_manifest": {
+            "matrix_file": str(matrix_file),
+            "matrix_sha256": _sha256(matrix_file),
+            "ads_file": str(ads_file),
+            "ads_sha256": _sha256(ads_file),
+            "random_state": random_state,
+            "workers_per_model": n_jobs,
+        },
         "quality_report": {
             "columns": quality_report["columns"],
             "flagged_columns": [p["column"] for p in quality_report["flagged"]],
@@ -134,11 +155,38 @@ def run(
         "split": {"n_train": len(train_rows), "n_test": len(test_rows), "n_dropped": dropped},
         "model_results": model_results,
     }
-    report_file.parent.mkdir(parents=True, exist_ok=True)
-    report_file.write_text(json.dumps(report, indent=2, default=str))
+    atomic_write_json(report_file, report)
     print(f"\nWrote {report_file}")
     return report
 
 
+def main() -> None:
+    """CLI entry point with exclusive report ownership."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Train Meta ad proxy models.")
+    parser.add_argument("--matrix", type=Path, default=DEFAULT_MATRIX_FILE)
+    parser.add_argument("--ads", type=Path, default=DEFAULT_ADS_FILE)
+    parser.add_argument("--report", type=Path, default=DEFAULT_REPORT_FILE)
+    parser.add_argument("--random-state", type=int, default=42)
+    parser.add_argument(
+        "--workers-per-model",
+        type=int,
+        default=1,
+        help="CPU workers used by each XGBoost fit (default 1 for safe concurrent jobs).",
+    )
+    args = parser.parse_args()
+    if args.workers_per_model < 1:
+        parser.error("--workers-per-model must be at least 1")
+    with exclusive_output(args.report):
+        run(
+            matrix_file=args.matrix,
+            ads_file=args.ads,
+            report_file=args.report,
+            random_state=args.random_state,
+            n_jobs=args.workers_per_model,
+        )
+
+
 if __name__ == "__main__":
-    run()
+    main()

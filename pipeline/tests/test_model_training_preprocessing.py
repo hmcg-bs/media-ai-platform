@@ -17,6 +17,7 @@ def _row(ad_id: str, days_active=10, collation_count=1, variants_featured_count=
     base = {
         "ad_id": ad_id,
         "days_active": days_active,
+        "brand_scaling_count": 2,
         "collation_count": collation_count,
         "variants_featured_count": variants_featured_count,
         "price_tier": "mid",
@@ -70,16 +71,22 @@ class TestBuildXy:
         assert "days_active" not in X.columns
         assert list(y) == [0.0, 1.0, 2.0, 3.0, 4.0]
 
-    def test_other_target_columns_also_excluded_from_x(self):
+    def test_other_proxy_columns_also_excluded_from_x(self):
         rows = [_row(str(i)) for i in range(5)]
         X, _y = build_xy(rows, "days_active")
         assert "collation_count" not in X.columns
-        assert "variants_featured_count" not in X.columns
+        assert "brand_scaling_count" not in X.columns
+        assert "variants_featured_count" in X.columns
 
     def test_ad_id_excluded_from_x(self):
         rows = [_row(str(i)) for i in range(5)]
         X, _y = build_xy(rows, "days_active")
         assert "ad_id" not in X.columns
+
+    def test_page_id_excluded_from_x(self):
+        rows = [_row(str(i), page_id=f"brand-{i}") for i in range(5)]
+        X, _y = build_xy(rows, "days_active")
+        assert "page_id" not in X.columns
 
     def test_price_tier_kept_as_categorical_feature(self):
         rows = [_row(str(i)) for i in range(5)]
@@ -153,6 +160,7 @@ class TestBuildPreprocessor:
         X_transformed = preprocessor.fit_transform(X)
         assert X_transformed.shape[0] == 10
         assert not np.isnan(X_transformed).any()
+        assert X_transformed.shape[1] > X.shape[1]  # missingness indicator retained
 
     def test_categorical_unseen_value_at_transform_time_does_not_raise(self):
         train_rows = [_row(str(i), dominant_color="red") for i in range(10)]

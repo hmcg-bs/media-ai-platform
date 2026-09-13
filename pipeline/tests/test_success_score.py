@@ -22,7 +22,9 @@ def _synthetic_rows(n: int) -> list[dict]:
     for i in range(n):
         rows.append({
             "ad_id": str(i),
+            "page_id": f"brand_{i // 3}",
             "days_active": rng.randint(1, 200),
+            "brand_scaling_count": 3,
             "collation_count": rng.randint(1, 5),
             "variants_featured_count": rng.randint(0, 4),
             "shows_all_variants": rng.choice([True, False]),
@@ -37,36 +39,32 @@ def _synthetic_rows(n: int) -> list[dict]:
 
 
 class TestComputeCompositeSuccessScore:
-    def test_equal_weighted_mean_of_zscores(self):
+    def test_longevity_is_base_and_score_is_bounded(self):
         rows = [
-            {"ad_id": "1", "days_active": 0, "collation_count": 0, "variants_featured_count": 0},
-            {"ad_id": "2", "days_active": 10, "collation_count": 10, "variants_featured_count": 10},
+            {"ad_id": "1", "days_active": 1, "brand_scaling_count": 100, "collation_count": 10},
+            {"ad_id": "2", "days_active": 100, "brand_scaling_count": 1, "collation_count": 0},
         ]
         scored = compute_composite_success_score(rows)
-        # Two rows, symmetric around the mean -- z-scores are +-1 exactly
-        # for a 2-point sample (std uses n-1 by default, matching this).
         low_score = scored[0]["composite_success_score"]
         high_score = scored[1]["composite_success_score"]
-        assert low_score < 0
-        assert high_score > 0
-        assert abs(low_score + high_score) < 1e-9
+        assert 0 <= low_score < high_score <= 1
 
-    def test_zero_variance_target_contributes_zero_not_nan(self):
+    def test_scaling_weights_equal_longevity_and_variant_inputs(self):
         rows = [
-            {
-                "ad_id": str(i),
-                "days_active": 5,
-                "collation_count": 1,
-                "variants_featured_count": i % 3,
-            }
-            for i in range(10)
+            {"ad_id": "1", "days_active": 30, "brand_scaling_count": 1, "collation_count": 1},
+            {"ad_id": "2", "days_active": 30, "brand_scaling_count": 20, "collation_count": 1},
         ]
         scored = compute_composite_success_score(rows)
-        # days_active and collation_count are constant across all rows (zero
-        # variance) -- their z-score contribution must be a clean 0.0, never
-        # a divide-by-zero NaN silently poisoning the composite.
-        for row in scored:
-            assert row["composite_success_score"] == row["composite_success_score"]  # not NaN
+        assert scored[1]["composite_success_score"] > scored[0]["composite_success_score"]
+
+    def test_landing_page_sku_count_is_not_a_proxy_ingredient(self):
+        base = {"days_active": 30, "brand_scaling_count": 2, "collation_count": 1}
+        rows = [
+            {"ad_id": "1", **base, "variants_featured_count": 0},
+            {"ad_id": "2", **base, "variants_featured_count": 99},
+        ]
+        scores = compute_composite_success_score(rows)
+        assert scores[0]["composite_success_score"] == scores[1]["composite_success_score"]
 
 
 class TestBuildXyComposite:
@@ -75,12 +73,13 @@ class TestBuildXyComposite:
         X, y = build_xy_composite(rows, include_embeddings=False)
 
         leaky_cols = (
-            "days_active", "collation_count", "variants_featured_count", "shows_all_variants",
+            "days_active", "brand_scaling_count", "collation_count", "page_id",
         )
         for col in leaky_cols:
             assert col not in X.columns
         assert "composite_success_score" not in X.columns
         assert "ad_id" not in X.columns
+        assert "variants_featured_count" in X.columns
         assert len(y) == len(X) == 20
 
     def test_price_tier_kept_as_categorical_feature(self):
@@ -100,6 +99,10 @@ class TestTrainAndExplain:
         ):
             assert key in results
         assert results["n_train"] + results["n_test"] == 60
+        assert results["split_strategy"] == "advertiser_group_holdout"
+        assert results["advertiser_overlap"] == 0
+        assert results["baseline_mae"] >= 0
+        assert 0 <= results["top_20pct_precision"] <= 1
         assert len(results["top_features_by_shap"]) > 0
         for entry in results["top_features_by_shap"]:
             assert entry["mean_abs_shap"] >= 0

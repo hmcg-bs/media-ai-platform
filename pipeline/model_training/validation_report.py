@@ -30,7 +30,7 @@ DEFAULT_TRAINING_REPORT_FILE = DATA_DIR / "model_training_report.json"
 DEFAULT_REPORT_MD = DATA_DIR / "feature_validation_report.md"
 DEFAULT_REPORT_JSON = DATA_DIR / "feature_validation_report.json"
 
-_ID_AND_LABEL_COLUMNS = {"ad_id", "price_tier"}  # profiled, but not run through target correlation
+_ID_AND_LABEL_COLUMNS = {"ad_id", "page_id", "price_tier"}
 
 
 def _find_model_importance(column: str, training_report: dict[str, Any]) -> list[dict[str, Any]]:
@@ -45,9 +45,12 @@ def _find_model_importance(column: str, training_report: dict[str, Any]) -> list
     hits: list[dict[str, Any]] = []
     for target, variants in training_report.get("model_results", {}).items():
         for variant_name, variant_result in variants.items():
-            entries = (
-                variant_result.get("top_covariates") or variant_result.get("top_features") or []
-            )
+            entries = variant_result.get("top_covariates") or variant_result.get("top_features")
+            if not entries:
+                entries = [
+                    (entry["feature"], entry["mean_abs_shap"])
+                    for entry in variant_result.get("top_features_by_shap", [])
+                ]
             for name, importance in entries:
                 if name == f"numeric__{column}" or name.startswith(f"categorical__{column}_"):
                     hits.append({
@@ -85,7 +88,7 @@ def build_validation_report(
 
     feature_entries: dict[str, Any] = {}
     for column, profile in quality["columns"].items():
-        if column == "ad_id":
+        if column in {"ad_id", "page_id"}:
             continue
         meta = get_feature_meta(column)
         entry: dict[str, Any] = {

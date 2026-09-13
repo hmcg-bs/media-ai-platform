@@ -7,10 +7,10 @@ from all three target signals, fit with XGBoost, explained with Tree SHAP
 (via XGBoost's own `pred_contribs`, not the separate `shap` package -- same
 algorithm, no new dependency).
 
-Uses a RANDOM train/test split, not the time-based one preprocessing.py's
-time_based_split provides: this analysis isn't forecasting forward onto
-not-yet-proven ads, so held-out rows should be a random sample of the whole
-population, not deliberately the newest slice.
+Uses an advertiser-group holdout: ads from one Meta page never occur in both
+train and test. This is retrospective attribution rather than forecasting,
+but a random row split would still overstate generalization by leaking each
+brand's repeated creative and landing-page conventions across the boundary.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GroupShuffleSplit, train_test_split
 
 from pipeline.model_training.preprocessing import (
     _EMBEDDING_COLUMNS,
@@ -30,27 +30,42 @@ from pipeline.model_training.preprocessing import (
     build_preprocessor,
 )
 
-# shows_all_variants is a near-deterministic function of variants_featured
-# (one of the composite's own three ingredients) -- excluded the same way
-# preprocessing.py's LEAKY_FEATURES_BY_TARGET excludes it from
-# variants_featured_count's own standalone model.
-_COMPOSITE_LEAKY_FEATURES = ("shows_all_variants",)
+_SCORE_WEIGHTS = {
+    "longevity": 0.70,
+    "longevity_scaling_interaction": 0.20,
+    "variant_boost": 0.10,
+}
 
 
 def compute_composite_success_score(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Adds `composite_success_score` to a copy of each row: the mean of
-    each of the three target signals' corpus-wide z-scores. Equal-weighted
-    -- no signal is treated as more important a priori than the others.
-    A zero-variance target (std==0) contributes a constant 0 rather than
-    dividing by zero."""
+    """Add the bounded v1 Performance proxy to copies of ``rows``.
+
+    Percentile ranks make heavy-tailed ad ages and page sizes robust without
+    inventing spend precision the Ad Library does not expose. Longevity is the
+    base (70%), page-level Scaling weights Longevity through an interaction
+    (20%), and Meta collation count supplies a secondary Variant boost (10%).
+    A legacy matrix without Scaling degrades to one ad per page rather than
+    substituting the unrelated landing-page SKU count.
+    """
+    if not rows:
+        return []
     df = pd.DataFrame(rows)
-    zscored = []
-    for col in TARGET_COLUMNS:
-        values = df[col].astype(float)
-        std = values.std()
-        z = (values - values.mean()) / std if std > 0 else pd.Series(0.0, index=values.index)
-        zscored.append(z)
-    df["composite_success_score"] = pd.concat(zscored, axis=1).mean(axis=1)
+    def _numeric(column: str, default: float) -> pd.Series:
+        values = df[column] if column in df else pd.Series(default, index=df.index)
+        return pd.to_numeric(values, errors="coerce").fillna(default)
+
+    longevity = _numeric("days_active", 0).clip(lower=0)
+    scaling = _numeric("brand_scaling_count", 1).clip(lower=1)
+    variants = _numeric("collation_count", 0).clip(lower=0)
+
+    longevity_rank = longevity.rank(method="average", pct=True)
+    scaling_rank = np.log1p(scaling).rank(method="average", pct=True)
+    variant_rank = np.log1p(variants).rank(method="average", pct=True)
+    df["composite_success_score"] = (
+        _SCORE_WEIGHTS["longevity"] * longevity_rank
+        + _SCORE_WEIGHTS["longevity_scaling_interaction"] * longevity_rank * scaling_rank
+        + _SCORE_WEIGHTS["variant_boost"] * variant_rank
+    )
     return df.to_dict("records")
 
 
@@ -69,7 +84,6 @@ def build_xy_composite(
         list(_ID_COLUMNS)
         + list(TARGET_COLUMNS)
         + ["composite_success_score", "price_tier"]
-        + list(_COMPOSITE_LEAKY_FEATURES)
     )
     X = df.drop(columns=[c for c in drop_cols if c in df.columns])
     X["price_tier"] = df["price_tier"]
@@ -87,13 +101,26 @@ def train_and_explain(
     include_embeddings: bool = True,
     random_state: int = 42,
     top_n: int = 30,
+    n_jobs: int = 1,
 ) -> dict[str, Any]:
     scored_rows = compute_composite_success_score(rows)
     X, y = build_xy_composite(scored_rows, include_embeddings=include_embeddings)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=random_state
-    )
+    raw = pd.DataFrame(scored_rows)
+    page_ids = raw.get("page_id", pd.Series("", index=raw.index)).fillna("").astype(str)
+    ad_ids = raw.get("ad_id", pd.Series(raw.index.astype(str), index=raw.index)).astype(str)
+    groups = page_ids.where(page_ids.str.len() > 0, "__ad__" + ad_ids)
+    if groups.nunique() >= 2:
+        splitter = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=random_state)
+        train_idx, test_idx = next(splitter.split(X, y, groups))
+        split_strategy = "advertiser_group_holdout"
+    else:
+        train_idx, test_idx = train_test_split(
+            np.arange(len(X)), test_size=0.2, random_state=random_state
+        )
+        split_strategy = "random_holdout_insufficient_advertiser_groups"
+    X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+    y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
 
     preprocessor = build_preprocessor(X_train)
     X_train_t = preprocessor.fit_transform(X_train)
@@ -107,7 +134,7 @@ def train_and_explain(
         subsample=0.8,
         colsample_bytree=0.8,
         random_state=random_state,
-        n_jobs=-1,
+        n_jobs=n_jobs,
     )
     model.fit(X_train_t, y_train)
 
@@ -117,6 +144,11 @@ def train_and_explain(
     ss_tot = np.sum((y_test_arr - y_test_arr.mean()) ** 2)
     r2 = float(1 - ss_res / ss_tot) if ss_tot > 0 else float("nan")
     mae = float(np.mean(np.abs(y_test_arr - test_pred)))
+    baseline_mae = float(np.mean(np.abs(y_test_arr - np.median(y_train))))
+    k = max(1, int(np.ceil(len(y_test_arr) * 0.2)))
+    actual_top = set(np.argsort(y_test_arr)[-k:])
+    predicted_top = set(np.argsort(test_pred)[-k:])
+    top_precision = len(actual_top & predicted_top) / k
 
     booster = model.get_booster()
     dtest = xgb.DMatrix(X_test_t, feature_names=feature_names)
@@ -138,6 +170,12 @@ def train_and_explain(
         "n_features": X_train_t.shape[1],
         "test_r2": round(r2, 4),
         "test_mae": round(mae, 4),
+        "baseline_mae": round(baseline_mae, 4),
+        "mae_improvement_over_baseline": round(baseline_mae - mae, 4),
+        "top_20pct_precision": round(top_precision, 4),
+        "split_strategy": split_strategy,
+        "advertiser_overlap": len(set(groups.iloc[train_idx]) & set(groups.iloc[test_idx])),
+        "random_state": random_state,
         "y_train_mean": round(float(y_train.mean()), 4),
         "y_train_std": round(float(y_train.std()), 4),
         "top_features_by_shap": [

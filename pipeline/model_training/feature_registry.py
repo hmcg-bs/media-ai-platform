@@ -29,6 +29,11 @@ class FeatureMeta:
 
 FEATURE_REGISTRY: dict[str, FeatureMeta] = {
     "ad_id": FeatureMeta("id", "build_matrix.py", "Row identifier (ad_archive_id), not a feature."),
+    "page_id": FeatureMeta(
+        "id", "ingestion.models.CompetitorAd.page_id",
+        "Meta advertiser page identifier used only for grouped evaluation.",
+        caveats="Never passed to a model; prevents one advertiser appearing in both holdout sides.",
+    ),
     "price_tier": FeatureMeta(
         "label", "product_features.calculate_price_tier",
         "Fixed-dollar price bucket (budget <$15 / mid $15-35 / premium $35-60 / "
@@ -145,16 +150,14 @@ FEATURE_REGISTRY: dict[str, FeatureMeta] = {
         "Whether the landing page shows more than one product variant "
         "(len(variants_featured) > 1, computed upstream in ingestion/).",
         caveats="Near-tautological with variants_featured_count (same underlying "
-        "data) -- deliberately EXCLUDED from variants_featured_count's own model "
-        "input (preprocessing.py::LEAKY_FEATURES_BY_TARGET) to avoid the model "
-        "'predicting' the count from a summary of itself. Still valid as a feature "
-        "for the other two targets.",
+        "landing-page data). Neither field is part of the Meta Performance proxy; "
+        "availability is represented separately by has_product_page.",
     ),
     "variants_featured_count": FeatureMeta(
-        "target", "product_features.py",
+        "numeric", "product_features.py",
         "Count of distinct product variants (SKUs/bundle tiers) shown on the "
-        "landing page. P1 target variable -- landing-page product complexity, "
-        "distinct from Meta's own collation_count.",
+        "landing page. A post-click product-complexity feature, not Meta's "
+        "active creative Variant performance proxy.",
         caveats="Defaults to 0 both when a product genuinely has one SKU AND when "
         "product_page enrichment never ran -- these two cases are NOT "
         "distinguishable from the count alone. Coverage 53.0% real variant data "
@@ -187,6 +190,21 @@ FEATURE_REGISTRY: dict[str, FeatureMeta] = {
         "investigation -- a genuine direct passthrough, not a pipeline bug, but a "
         "structurally weak signal. Both regression models on this target show weak "
         "test R2 (around -0.09 to -0.04) consistent with this.",
+    ),
+    "brand_scaling_count": FeatureMeta(
+        "target", "build_matrix.py::_brand_scaling_counts",
+        "Scaling proxy: number of ads captured for the same known Meta page "
+        "in the complete active-search corpus.",
+        caveats="Coverage depends on complete per-brand capture. Missing page_id "
+        "falls back to 1 and is never pooled with other unknown advertisers.",
+    ),
+    "has_product_page": FeatureMeta(
+        "boolean", "extractor.py",
+        "Whether landing-page enrichment was available for this row.",
+    ),
+    "has_step2_features": FeatureMeta(
+        "boolean", "extractor.py",
+        "Whether Step 2 creative Extraction was available for this row.",
     ),
     "publisher_count": FeatureMeta(
         "numeric", "extractor.py",

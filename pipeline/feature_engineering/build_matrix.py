@@ -17,11 +17,12 @@ from __future__ import annotations
 
 import json
 import random
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
 from ingestion.merge_step2_features import load_step2_results
+from pipeline.artifacts import atomic_write_json, exclusive_output
 from pipeline.clients.replicate_client import EmbeddingClient
 from pipeline.feature_engineering.extractor import extract_all_features
 from pipeline.logger import get_logger
@@ -35,12 +36,22 @@ DEFAULT_OUTPUT_FILE = DATA_DIR / "feature_matrix.json"
 
 
 def _write_rows(path: Path, rows: list[dict[str, Any]]) -> None:
-    """Atomic write (temp file + rename) so a crash mid-write never leaves a
-    truncated/corrupt checkpoint on disk."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(rows, indent=2, default=str))
-    tmp.replace(path)
+    """Atomic checkpoint publish; caller owns the output lock."""
+    atomic_write_json(path, rows)
+
+
+def _brand_scaling_counts(ads: list[dict[str, Any]]) -> Counter[str]:
+    """Count captured active-search ads per known Meta page.
+
+    The Apify actor is configured for active ads, so the complete per-page
+    corpus count is the repository's available Scaling proxy. Missing page IDs
+    are not pooled into one fictitious brand.
+    """
+    ad_ids_by_page: defaultdict[str, set[str]] = defaultdict(set)
+    for ad in ads:
+        if ad.get("page_id") and ad.get("ad_archive_id"):
+            ad_ids_by_page[str(ad["page_id"])].add(str(ad["ad_archive_id"]))
+    return Counter({page_id: len(ad_ids) for page_id, ad_ids in ad_ids_by_page.items()})
 
 
 def build_feature_matrix(
@@ -71,7 +82,9 @@ def build_feature_matrix(
     disk every `checkpoint_every` newly-processed ads, so a later crash loses
     at most one checkpoint interval's worth of paid API calls, not the whole
     run."""
-    ads = json.loads(ads_file.read_text())
+    all_ads = json.loads(ads_file.read_text())
+    scaling_counts = _brand_scaling_counts(all_ads)
+    ads = list(all_ads)
     if sample_size is not None:
         rng = random.Random(seed)
         ads = rng.sample(ads, min(sample_size, len(ads)))
@@ -79,8 +92,16 @@ def build_feature_matrix(
     creative_by_id = load_step2_results(step2_out_dir)
     embedding_client = embedding_client or EmbeddingClient()
 
+    ads_by_id = {str(ad.get("ad_archive_id")): ad for ad in all_ads}
     existing_rows = existing_rows or []
-    rows: list[dict[str, Any]] = list(existing_rows)
+    rows: list[dict[str, Any]] = []
+    for existing in existing_rows:
+        row = dict(existing)
+        ad = ads_by_id.get(str(row.get("ad_id")), {})
+        page_id = str(ad.get("page_id") or row.get("page_id") or "")
+        row["page_id"] = page_id
+        row["brand_scaling_count"] = scaling_counts.get(page_id, 1)
+        rows.append(row)
     already_have_ids: set[str] = {r["ad_id"] for r in existing_rows}
     price_tier_counts: Counter[str] = Counter(r["price_tier"] for r in existing_rows)
     hook_framework_counts: Counter[str] = Counter(
@@ -106,7 +127,14 @@ def build_feature_matrix(
 
         if creative_features is not None:
             with_creative_features += 1
-        rows.append({"ad_id": ad_id, "price_tier": price_tier, **features})
+        page_id = str(ad.get("page_id") or "")
+        rows.append({
+            "ad_id": ad_id,
+            "page_id": page_id,
+            "brand_scaling_count": scaling_counts.get(page_id, 1),
+            "price_tier": price_tier,
+            **features,
+        })
         already_have_ids.add(ad_id)
         price_tier_counts[price_tier] += 1
         hook_framework_counts[features.get("creative_hook_framework") or "null"] += 1
@@ -150,6 +178,8 @@ def main() -> None:
         "(default: resume, skipping ad_ids already present in --out).",
     )
     args = parser.parse_args()
+    if args.checkpoint_every < 1:
+        parser.error("--checkpoint-every must be at least 1")
 
     existing_rows: list[dict[str, Any]] = []
     if not args.no_resume and args.out.exists():
@@ -157,15 +187,15 @@ def main() -> None:
         print(f"Resuming: {len(existing_rows)} ads already in {args.out}")
 
     start = time.monotonic()
-    rows, summary = build_feature_matrix(
-        ads_file=args.ads, step2_out_dir=args.step2_out,
-        sample_size=args.sample_size, seed=args.seed,
-        existing_rows=existing_rows,
-        checkpoint_path=args.out, checkpoint_every=args.checkpoint_every,
-    )
+    with exclusive_output(args.out):
+        rows, summary = build_feature_matrix(
+            ads_file=args.ads, step2_out_dir=args.step2_out,
+            sample_size=args.sample_size, seed=args.seed,
+            existing_rows=existing_rows,
+            checkpoint_path=args.out, checkpoint_every=args.checkpoint_every,
+        )
+        _write_rows(args.out, rows)
     elapsed = time.monotonic() - start
-
-    _write_rows(args.out, rows)
 
     print(f"✅ Built feature matrix: {summary['row_count']} rows -> {args.out}")
     print(f"   Elapsed: {elapsed:.1f}s ({elapsed / max(summary['row_count'], 1):.2f}s/ad)")

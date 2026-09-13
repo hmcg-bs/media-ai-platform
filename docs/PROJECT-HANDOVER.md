@@ -52,7 +52,7 @@ extend these**, they are retired scaffold, not live code.
 |---|---|---|---|
 | 1. Ingestion | **Live, iterated on extensively.** Scraping + landing-page enrichment pipeline for the Supplements category is mature (coverage numbers below). Recurring-schedule ETL for corpus freshness is discussed but **not built**. | [#1](https://github.com/hmcg-bs/media-ai-platform/issues/1) (shared with modeling, still open) | `docs/architecture-review-ingestion.md`, `docs/extraction-failure-modes.md` |
 | 2. Extraction | **Live.** `pipeline/orchestrator.py` + `pipeline/stages/*` — deterministic (metadata, OCR, colour) + cognitive (Gemini) stages, per-stage fallback. Wired to the ingestion corpus. | [#1](https://github.com/hmcg-bs/media-ai-platform/issues/1) | `docs/adr/ADR-006-step2-ensemble-extraction.md`, `docs/blueprints/step2-ensemble-extract.md` |
-| 3. Pattern Discovery / modeling | **Live, but methodology evolved past the original plan.** Cox survival (`days_active`, censoring-aware) + composite z-scored success-score with XGBoost/SHAP feature attribution — not a single straight regressor per target as originally scoped. | [#1](https://github.com/hmcg-bs/media-ai-platform/issues/1) | `pipeline/model_training/*`, ADR references inline in map #1 |
+| 3. Pattern Discovery / modeling | **Live, but methodology evolved past the original plan.** Cox survival (`days_active`, censoring-aware) + bounded Longevity×Scaling/Variant proxy with advertiser-grouped XGBoost/SHAP attribution — not a single straight regressor per target as originally scoped. | [#1](https://github.com/hmcg-bs/media-ai-platform/issues/1) | `docs/meta-ads-training-pipeline.md`, `pipeline/model_training/*` |
 | Generation (cold-start) | **Live, v2 just shipped this session.** Layout-first architecture, deterministic-first duplicate-product detection + surgical repair, multi-variant generation. Re-render path (existing draft → Critique → regenerate) is **not built**. | [#36](https://github.com/hmcg-bs/media-ai-platform/issues/36) | `docs/generation-v1-architecture.md`, `docs/generation-failure-modes.md` |
 | Generation harness (observability/orchestration/eval) | **Barely started.** Only the one-time architecture visualization is done; the actual harness (the map's real destination) has no design yet. | [#42](https://github.com/hmcg-bs/media-ai-platform/issues/42) | issue #42 itself (no dedicated doc yet) |
 | 4. Fine-Tuning | **Not started.** Explicitly Phase 2 per `CLAUDE.md`. | — | — |
@@ -80,6 +80,7 @@ Media AI Platform/
 │   ├── generation-failure-modes.md     Generation's live bug catalog (14 entries)
 │   ├── extraction-failure-modes.md     Step 2/ingestion's live bug catalog
 │   ├── architecture-review-ingestion.md
+│   ├── meta-ads-training-pipeline.md   Step 1→3 proxy, checkpoints, evaluation, constraints
 │   └── meta-ad-image-model-stack.md    Model-choice research for Generation's image models
 ├── ingestion/                 Step 1: scraping + landing-page enrichment (28 modules)
 ├── pipeline/

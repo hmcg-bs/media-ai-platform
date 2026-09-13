@@ -85,11 +85,12 @@ class TestBuildSurvivalFrame:
         frame = build_survival_frame(rows, ads, scrape_dates=set())
         assert len(frame) == 1
 
-    def test_row_with_no_end_date_dropped(self):
+    def test_row_with_no_end_date_is_right_censored(self):
         rows = [_row("1")]
         ads = [_ad("1", None)]
         frame = build_survival_frame(rows, ads, scrape_dates=set())
-        assert len(frame) == 0
+        assert len(frame) == 1
+        assert bool(frame.iloc[0]["event_observed"]) is False
 
     def test_scrape_dates_computed_automatically_when_not_given(self):
         # Default frequency_threshold is 1% -- needs a large enough sample
@@ -174,6 +175,9 @@ class TestCoxFitAndEvaluate:
         X_test_proc = pd.DataFrame(
             preprocessor.transform(X_test), columns=preprocessor.get_feature_names_out()
         )
+        X_train_proc, X_test_proc, _ = drop_zero_variance_columns(
+            X_train_proc, X_test_proc
+        )
 
         model = fit_cox_model(X_train_proc, dur_train, ev_train)
         results = evaluate_cox_model(model, X_test_proc, dur_test, ev_test)
@@ -182,6 +186,22 @@ class TestCoxFitAndEvaluate:
             assert key in results
         assert 0.0 <= results["concordance_index"] <= 1.0
         assert results["n_test"] == len(X_test_proc)
+
+    def test_no_admissible_holdout_pairs_is_reported_not_raised(self):
+        class ConstantRiskModel:
+            params_ = pd.Series({"x": 0.0})
+
+            def predict_partial_hazard(self, X):
+                return pd.Series([1.0] * len(X))
+
+        results = evaluate_cox_model(
+            ConstantRiskModel(),
+            pd.DataFrame({"x": [0.0, 1.0]}),
+            pd.Series([10.0, 20.0]),
+            pd.Series([False, False]),
+        )
+        assert results["concordance_index"] is None
+        assert results["evaluation_status"] == "no_admissible_pairs"
 
 
 class TestDropZeroVarianceColumns:

@@ -14,26 +14,17 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-# The three columns this project's plan treats as target-variable
-# candidates (days_active P0, collation_count/variants_featured_count P1).
+# The three Meta Ad Library proxy ingredients: Longevity, page-level Scaling,
+# and Meta's active creative Variant count. Landing-page SKU/bundle count is a
+# product feature, not a Meta performance signal.
 # Excluded from every model's X regardless of which one is the current y,
 # to avoid one target silently leaking into another's feature set.
-TARGET_COLUMNS = ("days_active", "collation_count", "variants_featured_count")
+TARGET_COLUMNS = ("days_active", "brand_scaling_count", "collation_count")
 
-_ID_COLUMNS = ("ad_id",)
+_ID_COLUMNS = ("ad_id", "page_id")
 _EMBEDDING_COLUMNS = ("title_embedding", "body_embedding", "usp_embedding")
 
-# Features that are near-deterministic functions of a specific target,
-# computed from the exact same underlying data the target counts -- not
-# independent signal. Confirmed live: shows_all_variants is computed
-# upstream as `len(variants_featured) > 1` (zenrows_scraper.py,
-# shopify_json.py), so training variants_featured_count with it in X let
-# the model "predict" the count largely by reading a boolean summary of
-# itself (it dominated feature importance at 0.35, far above any real
-# creative/product signal).
-LEAKY_FEATURES_BY_TARGET: dict[str, tuple[str, ...]] = {
-    "variants_featured_count": ("shows_all_variants",),
-}
+LEAKY_FEATURES_BY_TARGET: dict[str, tuple[str, ...]] = {}
 
 
 def load_start_dates(ads: list[dict[str, Any]]) -> dict[str, str]:
@@ -130,7 +121,10 @@ def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     categorical_cols = [c for c in X.columns if c not in numeric_cols]
 
     numeric_pipeline = Pipeline([
-        ("impute", SimpleImputer(strategy="median")),
+        # Preserve whether a measurement was absent. Several feature families
+        # are missing by pipeline stage, so median fill without an indicator
+        # erases a real and potentially systematic collection difference.
+        ("impute", SimpleImputer(strategy="median", add_indicator=True)),
         ("scale", StandardScaler()),
     ])
     categorical_pipeline = Pipeline([

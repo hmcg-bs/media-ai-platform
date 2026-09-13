@@ -11,14 +11,14 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import KFold, cross_val_score
+from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.pipeline import Pipeline
 from xgboost import XGBRegressor
 
 from pipeline.model_training.preprocessing import build_preprocessor
 
 
-def _make_model() -> XGBRegressor:
+def _make_model(n_jobs: int = 1) -> XGBRegressor:
     return XGBRegressor(
         n_estimators=300,
         max_depth=4,
@@ -26,7 +26,9 @@ def _make_model() -> XGBRegressor:
         subsample=0.8,
         colsample_bytree=0.8,
         random_state=42,
-        n_jobs=-1,
+        # One worker per model makes separate training jobs composable instead
+        # of every process claiming all CPUs and destabilizing its neighbors.
+        n_jobs=n_jobs,
     )
 
 
@@ -50,14 +52,17 @@ def train_and_evaluate(
     X_test: pd.DataFrame,
     y_test: pd.Series,
     cv_folds: int = 5,
+    n_jobs: int = 1,
 ) -> dict[str, Any]:
     """Fits preprocessing on train only, evaluates on held-out test, and
     reports 5-fold CV (on train only, never touching test) so a single lucky
     split isn't mistaken for a stable result."""
     preprocessor = build_preprocessor(X_train)
-    pipeline = Pipeline([("prep", preprocessor), ("model", _make_model())])
+    pipeline = Pipeline([("prep", preprocessor), ("model", _make_model(n_jobs=n_jobs))])
 
-    cv = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    # X_train arrives oldest-first from time_based_split. Preserve that order
+    # in CV so validation never trains on ads newer than its validation fold.
+    cv = TimeSeriesSplit(n_splits=cv_folds)
     cv_neg_mae = cross_val_score(
         pipeline, X_train, y_train, cv=cv, scoring="neg_mean_absolute_error"
     )
@@ -83,6 +88,7 @@ def train_and_evaluate(
         "cv_mae_std": round(float(cv_neg_mae.std()), 4),
         "cv_r2_mean": round(float(cv_r2.mean()), 4),
         "cv_r2_std": round(float(cv_r2.std()), 4),
+        "cv_strategy": "expanding_time_series",
         "top_features": [(str(name), round(float(imp), 4)) for name, imp in top_features],
         "y_train_mean": round(float(y_train.mean()), 4),
         "y_train_median": round(float(y_train.median()), 4),

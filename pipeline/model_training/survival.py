@@ -55,8 +55,9 @@ def build_survival_frame(
     (== days_active -- valid as "time observed so far" whether censored or
     not) and `event_observed` (True: a genuine, non-scrape-date end_date was
     recorded; False: censored, still running or unknown at scrape time).
-    Rows with no matching ad or no end_date are dropped -- can't establish
-    censoring status for them."""
+    Rows with no matching ad are dropped. A matched ad with no end date is
+    explicitly right-censored: ``None`` is the clearest representation of
+    "still active", not missing evidence to discard."""
     if scrape_dates is None:
         scrape_dates = identify_scrape_dates(ads)
     end_date_by_id = {a["ad_archive_id"]: a.get("end_date") for a in ads}
@@ -64,11 +65,11 @@ def build_survival_frame(
     records = []
     for row in rows:
         end_date = end_date_by_id.get(row.get("ad_id"))
-        if not end_date:
+        if row.get("ad_id") not in end_date_by_id:
             continue
         record = dict(row)
         record["duration"] = row.get("days_active", 0)
-        record["event_observed"] = end_date not in scrape_dates
+        record["event_observed"] = bool(end_date) and end_date not in scrape_dates
         records.append(record)
     return pd.DataFrame(records)
 
@@ -82,18 +83,22 @@ def build_survival_xy(
     build_xy's exact days_active covariate-building (raw embeddings
     excluded -- Cox's Newton-Raphson fit doesn't handle thousands of
     partly-collinear one-hot/embedding dims well, unlike a tree model;
-    category-trend cluster features already carry embedding signal in a
-    much more compact, Cox-friendly form) and drops rows with no matching
-    ad/end_date on top of that, so all three return values stay aligned."""
+    compact form can be added in a leakage-safe future implementation) and
+    drops rows with no matching ad on top of that, so all three return values
+    stay aligned. A matched ad with no end date is retained as censored."""
     if scrape_dates is None:
         scrape_dates = identify_scrape_dates(ads)
     end_date_by_id = {a["ad_archive_id"]: a.get("end_date") for a in ads}
 
-    rows_with_end_date = [r for r in rows if end_date_by_id.get(r.get("ad_id"))]
-    X, duration = build_xy(rows_with_end_date, "days_active", include_embeddings=False)
+    matched_rows = [r for r in rows if r.get("ad_id") in end_date_by_id]
+    X, duration = build_xy(matched_rows, "days_active", include_embeddings=False)
 
     event_observed = pd.Series(
-        [end_date_by_id[r["ad_id"]] not in scrape_dates for r in rows_with_end_date],
+        [
+            bool(end_date_by_id[r["ad_id"]])
+            and end_date_by_id[r["ad_id"]] not in scrape_dates
+            for r in matched_rows
+        ],
         name="event_observed",
     )
     # days_active is always populated (extractor.py defaults it to 0, never
@@ -165,7 +170,18 @@ def evaluate_cox_model(
     censored observations (unlike RMSE/R2, which need a true final value
     for every row). 0.5 = random ranking, 1.0 = perfect ranking."""
     risk_scores = model.predict_partial_hazard(X_test)
-    c_index = concordance_index(duration_test, -risk_scores, event_test)
+    try:
+        c_index: float | None = float(
+            concordance_index(duration_test, -risk_scores, event_test)
+        )
+        evaluation_status = "ok"
+    except ZeroDivisionError:
+        # A small/newest holdout can legitimately contain no comparable
+        # observed-event pairs. This makes C-index undefined, not the whole
+        # training job invalid; report the condition instead of losing every
+        # other model and the run manifest.
+        c_index = None
+        evaluation_status = "no_admissible_pairs"
 
     coefs = model.params_.sort_values(key=abs, ascending=False)
     top_covariates = [(str(name), round(float(val), 4)) for name, val in coefs.head(20).items()]
@@ -173,6 +189,7 @@ def evaluate_cox_model(
     return {
         "n_test": len(X_test),
         "n_events_observed_test": int(event_test.sum()),
-        "concordance_index": round(float(c_index), 4),
+        "concordance_index": round(c_index, 4) if c_index is not None else None,
+        "evaluation_status": evaluation_status,
         "top_covariates": top_covariates,
     }

@@ -78,6 +78,24 @@ class TestFindModelImportance:
         hits = _find_model_importance("body_length", training_report)
         assert len(hits) == 1
 
+    def test_matches_composite_shap_entries(self):
+        training_report = {
+            "model_results": {
+                "composite_success_score": {
+                    "without_embeddings": {
+                        "top_features_by_shap": [{
+                            "feature": "numeric__body_length",
+                            "mean_abs_shap": 0.25,
+                            "mean_signed_shap": 0.1,
+                        }]
+                    }
+                }
+            }
+        }
+        hits = _find_model_importance("body_length", training_report)
+        assert hits[0]["target"] == "composite_success_score"
+        assert hits[0]["importance"] == 0.25
+
     def test_no_match_returns_empty(self):
         training_report = {
             "model_results": {"collation_count": {"without_embeddings": {"top_features": []}}},

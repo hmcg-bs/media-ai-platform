@@ -23,7 +23,7 @@ ColumnKind = Literal["numeric", "boolean", "categorical", "embedding", "id"]
 
 # Columns whose real semantics are "id" or "label", not a feature to profile
 # the same way as everything else.
-_ID_COLUMNS = {"ad_id"}
+_ID_COLUMNS = {"ad_id", "page_id"}
 _EMBEDDING_COLUMNS = {"title_embedding", "body_embedding", "usp_embedding"}
 
 # High null rate / high point-mass thresholds -- tunable, not load-bearing

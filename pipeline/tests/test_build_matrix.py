@@ -36,6 +36,7 @@ class TestBuildFeatureMatrix:
         ads = [
             {
                 "ad_archive_id": "1",
+                "page_id": "brand-a",
                 "title": "Buy Now",
                 "body": "Great supplement",
                 "days_active": 30,
@@ -45,6 +46,7 @@ class TestBuildFeatureMatrix:
             },
             {
                 "ad_archive_id": "2",
+                "page_id": "brand-a",
                 "title": "Try Today",
                 "body": "Another great supplement",
                 "days_active": 10,
@@ -68,6 +70,8 @@ class TestBuildFeatureMatrix:
         assert len(rows) == 2
         assert summary["row_count"] == 2
         assert {r["ad_id"] for r in rows} == {"1", "2"}
+        assert all(r["page_id"] == "brand-a" for r in rows)
+        assert all(r["brand_scaling_count"] == 2 for r in rows)
 
     def test_price_tier_present_but_not_a_feature_key(self, tmp_path):
         ads_file, step2_dir = self._setup(tmp_path)
@@ -120,6 +124,39 @@ class TestBuildFeatureMatrix:
         )
         assert len(rows_a) == 3
         assert [r["ad_id"] for r in rows_a] == [r["ad_id"] for r in rows_b]
+
+    def test_sample_uses_full_corpus_brand_scaling_count(self, tmp_path):
+        step2_dir = tmp_path / "step2"
+        step2_dir.mkdir()
+        ads = [
+            {"ad_archive_id": str(i), "page_id": "same-brand", "title": f"Ad {i}"}
+            for i in range(5)
+        ]
+        ads_file = tmp_path / "ads.json"
+        ads_file.write_text(json.dumps(ads))
+
+        rows, _ = build_feature_matrix(
+            ads_file=ads_file,
+            step2_out_dir=step2_dir,
+            sample_size=1,
+            embedding_client=_fake_embedding_client(),
+        )
+        assert rows[0]["brand_scaling_count"] == 5
+
+    def test_duplicate_source_rows_do_not_inflate_scaling(self, tmp_path):
+        step2_dir = tmp_path / "step2"
+        step2_dir.mkdir()
+        ad = {"ad_archive_id": "1", "page_id": "brand", "title": "Ad"}
+        ads_file = tmp_path / "ads.json"
+        ads_file.write_text(json.dumps([ad, ad]))
+
+        rows, _ = build_feature_matrix(
+            ads_file=ads_file,
+            step2_out_dir=step2_dir,
+            embedding_client=_fake_embedding_client(),
+        )
+        assert len(rows) == 1
+        assert rows[0]["brand_scaling_count"] == 1
 
     def test_ad_without_ad_archive_id_is_skipped(self, tmp_path):
         step2_dir = tmp_path / "step2"
