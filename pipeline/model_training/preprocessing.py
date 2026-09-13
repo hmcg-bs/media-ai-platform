@@ -24,6 +24,14 @@ TARGET_COLUMNS = ("days_active", "brand_scaling_count", "collation_count")
 _ID_COLUMNS = ("ad_id", "page_id")
 _EMBEDDING_COLUMNS = ("title_embedding", "body_embedding", "usp_embedding")
 
+# Cognitive extraction intentionally preserves detailed free-text categories
+# (for example product visual state and texture). In a few-hundred-row corpus,
+# many of those levels occur once; one-hot encoding each singleton creates
+# thousands of brittle columns that cannot generalize to a later advertiser.
+# Pool levels seen fewer than this many times in the training fold. This is fit
+# on train only, so neither the holdout vocabulary nor its frequencies leak.
+MIN_CATEGORY_FREQUENCY = 5
+
 LEAKY_FEATURES_BY_TARGET: dict[str, tuple[str, ...]] = {}
 
 
@@ -113,10 +121,10 @@ def build_xy(
 
 def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     """Median-impute + scale numeric columns, most_frequent-impute +
-    one-hot encode categorical/boolean columns. Fit only on train (call
-    .fit_transform on train, .transform on test) -- constructing this from
-    X's dtypes, not the full corpus, is what keeps test-set values out of
-    the fit."""
+    frequency-capped one-hot encode categorical/boolean columns. Fit only on
+    train (call .fit_transform on train, .transform on test) -- constructing
+    this from X's dtypes, not the full corpus, is what keeps test-set values
+    and category frequencies out of the fit."""
     numeric_cols = [c for c in X.columns if pd.api.types.is_numeric_dtype(X[c])]
     categorical_cols = [c for c in X.columns if c not in numeric_cols]
 
@@ -129,7 +137,11 @@ def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     ])
     categorical_pipeline = Pipeline([
         ("impute", SimpleImputer(strategy="most_frequent")),
-        ("encode", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
+        ("encode", OneHotEncoder(
+            handle_unknown="infrequent_if_exist",
+            min_frequency=MIN_CATEGORY_FREQUENCY,
+            sparse_output=False,
+        )),
     ])
     return ColumnTransformer([
         ("numeric", numeric_pipeline, numeric_cols),

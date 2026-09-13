@@ -171,3 +171,17 @@ class TestBuildPreprocessor:
         preprocessor.fit(X_train)
         result = preprocessor.transform(X_test)  # must not raise
         assert result.shape[0] == 1
+
+    def test_rare_categorical_levels_are_pooled_from_training_only(self):
+        rows = [
+            _row(str(i), dominant_color="red" if i < 8 else f"singleton-{i}")
+            for i in range(10)
+        ]
+        X, _ = build_xy(rows, "days_active", include_embeddings=False)
+        preprocessor = build_preprocessor(X)
+        preprocessor.fit(X)
+
+        names = preprocessor.get_feature_names_out().tolist()
+        assert "categorical__dominant_color_red" in names
+        assert "categorical__dominant_color_infrequent_sklearn" in names
+        assert not any("singleton" in name for name in names)

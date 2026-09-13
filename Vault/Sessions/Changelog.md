@@ -30,12 +30,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Generation guidance now consumes the integrated training report and excludes unevaluable survival coefficients
 - Expanded the Supplements advertiser holdout from 35 to 101 ads
 - GCP auth health reporting now distinguishes renewable WIF from user ADC
+- Rare cognitive category levels are pooled using training-fold frequencies,
+  reducing brittle singleton features without leaking holdout vocabulary
+- Generation guidance now excludes pooled rare-category levels
+- Validated keyless WIF against live Cloud Vision and backfilled OCR for the
+  complete seeded 600-ad Supplements sample
 
 ### Fixed
 - Prevented same-advertiser train/test leakage and same-output concurrent job corruption
 - URL-encoded Meta Ad Library search queries and rejected incompatible ingestion resumes
 - Sent Replicate the required nested Pydantic schema and added targeted repair for incomplete cognitive artifacts
 - Honored Replicate low-credit rate-limit reset hints and kept seeded sample resumes exact
+- Corrected the documented WIF provider to the deployed `amp-provider` resource
 
 ### Removed
 - Target-derived cluster trend features from the default training CLI because their in-sample encoding leaked outcomes

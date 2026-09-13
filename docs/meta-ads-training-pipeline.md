@@ -114,6 +114,11 @@ so a Meta page cannot appear in both train and test and the test set better
 represents transfer to new brands under newer trends. The proxy percentile
 calibrator is fitted on training rows only. A second such split within training
 selects XGBoost parameters; the untouched outer test set is evaluated once.
+Categorical levels occurring fewer than five times in the training fold are
+pooled before one-hot encoding. This prevents near-unique cognitive descriptions
+(for example free-text texture and product-state values) from creating thousands
+of advertiser-specific columns; holdout values and frequencies are never used
+to form the pool.
 Reports include R², MAE, a
 median baseline comparison, top-20%-precision, advertiser overlap, SHAP
 attribution, seed, worker count, and SHA-256 hashes of both inputs. Component
@@ -129,7 +134,8 @@ universal fabricated definition of success.
 The final report embeds interpretable Tree SHAP values. Generation reads that
 same report directly and emits `supplements_generation_guide.json`; only
 directionally reliable, renderable features become directives. Embedding
-dimensions, missing-data levels, and campaign-operation fields are excluded.
+dimensions, missing-data/pooled-rare levels, and campaign-operation fields are
+excluded.
 Cox coefficients are also excluded whenever the survival holdout has no
 admissible event pairs; a fitted but unevaluable longevity model must not steer
 generation.

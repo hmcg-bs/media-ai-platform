@@ -16,3 +16,6 @@ Detailed commit history with dates, branches, and descriptions.
 | 2026-09-12 | auto/meta-ads-model-pipeline | 3d2eac0 | Harden expanded extraction under API limits |
 | 2026-09-12 | auto/meta-ads-model-pipeline | 0c1a75a | Log expanded evaluation |
 | 2026-09-12 | auto/meta-ads-model-pipeline | 89338df | Configure keyless GCP auth for Amp orbs |
+| 2026-09-12 | auto/meta-ads-model-pipeline | 922a057 | Log keyless GCP orb setup |
+| 2026-09-12 | auto/meta-ads-model-pipeline | 105902f | Correct deployed GCP WIF provider |
+| 2026-09-12 | auto/meta-ads-model-pipeline | 5cd852f | Pool rare cognitive categories before training |

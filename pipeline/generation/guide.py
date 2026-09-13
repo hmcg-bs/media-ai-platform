@@ -44,8 +44,10 @@ DEFAULT_SUCCESS_SCORE_REPORT = DATA_DIR / "success_score_report_fresh.json"
 
 MIN_DIRECTION_RELIABILITY = 0.10
 
-# Category *levels* that mean "no data", never a real creative choice.
-_MISSING_DATA_LEVELS = {"unknown", "none", "nan", ""}
+# Category *levels* that mean "no data" or a pooled rare level, never a real
+# creative choice. `infrequent_sklearn` is produced by the train-only category
+# frequency cap; it means several unrelated rare values, not a renderable value.
+_MISSING_DATA_LEVELS = {"unknown", "none", "nan", "", "infrequent_sklearn"}
 
 # Dimension name -> bucket. Explicit allowlist rather than inferring from
 # name patterns, so a new feature silently landing in the wrong bucket (or
@@ -227,8 +229,8 @@ def extract_generation_guide(
     all_directional: list[dict[str, Any]] = []
     non_directional_notes: list[str] = []
     excluded_notes: list[str] = [
-        "Dropped every '_unknown'/'_None' category level (means 'no Step 2 "
-        "creative_features for this ad', not a real creative choice).",
+        "Dropped every '_unknown'/'_None' missing-data level and pooled "
+        "'_infrequent_sklearn' category (not a real creative choice).",
         "Dropped campaign-operations dimensions ("
         f"{', '.join(sorted(_NON_VISUAL_EXCLUDED_DIMENSIONS))}) "
         "-- real signal, but not something a generation agent renders as pixels.",

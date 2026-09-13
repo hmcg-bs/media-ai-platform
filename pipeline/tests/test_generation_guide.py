@@ -34,6 +34,7 @@ def reports(tmp_path: Path) -> tuple[Path, Path]:
                     "top_features": [
                         ["numeric__creative_cta_present", 0.05],
                         ["categorical__dominant_color_white", 0.04],
+                        ["categorical__primary_human_wardrobe_infrequent_sklearn", 0.03],
                     ]
                 }
             },
@@ -93,6 +94,7 @@ class TestExtractGenerationGuide:
         guide = extract_generation_guide(tr, sr)
         all_dims = [(s.dimension, s.value) for s in guide.visual_directives]
         assert ("dominant_color", "unknown") not in all_dims
+        assert not any("infrequent_sklearn" in note for note in guide.non_directional_signals)
 
     def test_non_visual_campaign_dimension_dropped(self, reports):
         tr, sr = reports
