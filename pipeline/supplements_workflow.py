@@ -19,6 +19,10 @@ from pipeline.generation.guide import extract_generation_guide
 from pipeline.validation.phase0_validator import apply_manual_taxonomy_gate
 from pipeline.validation.product_enrichment import build_product_enrichment_report
 from pipeline.validation.taxonomy_adjudication import verify_approved_taxonomy
+from pipeline.validation.taxonomy_scaling import (
+    apply_validated_classifier,
+    build_classifier_validation_report,
+)
 
 
 def _run_module(module: str, *args: str) -> None:
@@ -58,6 +62,29 @@ def main() -> None:
         "--taxonomy-approved-ads",
         type=Path,
         default=Path("data/supplements_taxonomy_approved.json"),
+    )
+    parser.add_argument(
+        "--taxonomy-classified-ads",
+        type=Path,
+        help=(
+            "Full classifier checkpoint. Required when human labels do not cover the full corpus; "
+            "its gold-sample predictions must pass the fixed scaling gate."
+        ),
+    )
+    parser.add_argument(
+        "--taxonomy-classifier-validation-report",
+        type=Path,
+        default=Path("data/supplements_taxonomy_classifier_validation.json"),
+    )
+    parser.add_argument(
+        "--taxonomy-review-queue",
+        type=Path,
+        default=Path("data/supplements_taxonomy_review_queue.json"),
+    )
+    parser.add_argument(
+        "--taxonomy-application-report",
+        type=Path,
+        default=Path("data/supplements_taxonomy_application_report.json"),
     )
     parser.add_argument(
         "--product-enriched-ads",
@@ -100,6 +127,9 @@ def main() -> None:
     with (
         exclusive_output(lock_target),
         exclusive_output(args.taxonomy_approved_ads),
+        exclusive_output(args.taxonomy_classifier_validation_report),
+        exclusive_output(args.taxonomy_review_queue),
+        exclusive_output(args.taxonomy_application_report),
         exclusive_output(args.product_enrichment_report),
     ):
         if not args.skip_scrape:
@@ -118,7 +148,50 @@ def main() -> None:
             verify_approved_taxonomy(taxonomy_report, labels)
         except ValueError as exc:
             parser.error(str(exc))
-        approved, counts = apply_manual_taxonomy_gate(ads, labels, taxonomy_report)
+        labelled_ids = {
+            str(row.get("ad_id") or "") for row in taxonomy_report.get("gold_labels", [])
+        }
+        corpus_ids = {str(ad.get("ad_archive_id") or "") for ad in ads}
+        if corpus_ids <= labelled_ids:
+            approved, counts = apply_manual_taxonomy_gate(ads, labels, taxonomy_report)
+            atomic_write_json(args.taxonomy_classifier_validation_report, {
+                "status": "not_required_full_human_coverage",
+            })
+            atomic_write_json(args.taxonomy_review_queue, [])
+            atomic_write_json(args.taxonomy_application_report, {
+                "status": "passed",
+                "mode": "full_human_coverage",
+                "counts": counts,
+            })
+        else:
+            if args.taxonomy_classified_ads is None:
+                parser.error(
+                    "human taxonomy does not cover the full corpus; provide "
+                    "--taxonomy-classified-ads so the gold-validated scaling gate can run"
+                )
+            if not args.taxonomy_classified_ads.exists():
+                parser.error(
+                    f"classified taxonomy corpus not found: {args.taxonomy_classified_ads}"
+                )
+            classified_ads = json.loads(args.taxonomy_classified_ads.read_text())
+            classifier_report = build_classifier_validation_report(
+                classified_ads, taxonomy_report
+            )
+            atomic_write_json(args.taxonomy_classifier_validation_report, classifier_report)
+            if classifier_report["status"] != "passed":
+                parser.error(
+                    "taxonomy classifier validation failed: "
+                    + "; ".join(classifier_report["failures"][:5])
+                )
+            approved, review_queue, application_report = apply_validated_classifier(
+                ads,
+                classified_ads,
+                taxonomy_report,
+                classifier_report,
+            )
+            counts = application_report["outcomes"]
+            atomic_write_json(args.taxonomy_review_queue, review_queue)
+            atomic_write_json(args.taxonomy_application_report, application_report)
         if not approved:
             parser.error("manual taxonomy gate approved zero ads")
         atomic_write_json(args.taxonomy_approved_ads, approved)

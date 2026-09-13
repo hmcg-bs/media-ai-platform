@@ -82,11 +82,14 @@ def segment_metrics(
     by_category: dict[str, list[int]] = {}
     by_cohort: dict[str, list[int]] = {}
     for i, row in enumerate(rows):
-        categories = (
-            [row["product_subcategory"]]
-            if row.get("product_subcategory")
-            else (row.get("search_queries") or ["unknown"])
-        )
+        if row.get("taxonomy_label_source") == "validated_classifier":
+            categories = []
+        else:
+            categories = (
+                [row["product_subcategory"]]
+                if row.get("product_subcategory")
+                else (row.get("search_queries") or ["unknown"])
+            )
         if isinstance(categories, str):
             categories = [categories]
         for category in set(str(c).lower() for c in categories if c):

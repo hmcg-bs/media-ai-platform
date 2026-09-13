@@ -562,3 +562,24 @@ remains blocked on rights and craft approval.
   baseline scenario has MAE 0.3509 versus 0.3731, but top-20% precision is only 0.1905 with
   95% interval [0.0500, 0.34783]; thus ranking promotion fails. This result is diagnostic because
   both taxonomy and product-enrichment eligibility are failed, not a replacement for v3 evidence.
+
+### Scalable taxonomy admission implementation (2026-09-13)
+
+- The 120-row artifact is now explicitly the untouched human gold set rather than the entire model
+  corpus. Its adjudication report retains hash-bound labels for both classes; the approved-label
+  output remains positive-only for compatibility.
+- New classifier predictions bind schema, provider/model, prompt hash, and implementation hash.
+  Automated binary admission requires confidence ≥0.80 and a 95% Wilson lower bound on gold-sample
+  positive precision ≥0.90 and recall ≥0.80, with at least 100 evaluated rows, 10 rows per class,
+  and 20 auto-positive predictions. These are fixed engineering gates, not literature-derived
+  constants.
+- The full classifier artifact, its gold subset, and human report are content-bound. Missing,
+  ambiguous, mixed-version, legacy-unprovenanced, or tampered predictions fail closed or enter a
+  separate human review queue. Human gold decisions always override model predictions.
+- Classifier-admitted rows carry no supplement subcategory and are excluded from segment evidence;
+  only human-adjudicated rows can support category claims. Taxonomy source is excluded from model
+  features and drift rankings, preventing review-path membership from becoming a predictive signal.
+- The Supplements workflow uses this scaling gate when human labels do not cover the corpus and
+  starts free-first/ZenRows product enrichment only after admission passes. Operational commands,
+  thresholds, rollback rules, and outputs are in `docs/taxonomy-scaling-and-zenrows-runbook.md`.
+  Current execution remains blocked because the gold review has no completed human decisions.

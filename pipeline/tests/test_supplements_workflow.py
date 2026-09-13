@@ -15,13 +15,16 @@ def test_product_enrichment_runs_between_taxonomy_and_matrix(monkeypatch, tmp_pa
     approved_path = tmp_path / "approved.json"
     enriched_path = tmp_path / "enriched.json"
     enrichment_report_path = tmp_path / "enrichment-report.json"
+    classifier_report_path = tmp_path / "classifier-report.json"
+    taxonomy_queue_path = tmp_path / "taxonomy-queue.json"
+    taxonomy_application_path = tmp_path / "taxonomy-application.json"
     diagnostics_path = tmp_path / "diagnostics.csv"
     matrix_path = tmp_path / "matrix.json"
     report_path = tmp_path / "training-report.json"
     guide_path = tmp_path / "guide.json"
     ads_path.write_text(json.dumps([{"ad_archive_id": "1", "link_url": "https://shop.test/p"}]))
     labels_path.write_text("{}")
-    taxonomy_report_path.write_text("{}")
+    taxonomy_report_path.write_text(json.dumps({"gold_labels": [{"ad_id": "1"}]}))
     approved = [{"ad_archive_id": "1", "link_url": "https://shop.test/p"}]
 
     monkeypatch.setattr(supplements_workflow, "verify_approved_taxonomy", lambda *_: None)
@@ -67,6 +70,12 @@ def test_product_enrichment_runs_between_taxonomy_and_matrix(monkeypatch, tmp_pa
             str(taxonomy_report_path),
             "--taxonomy-approved-ads",
             str(approved_path),
+            "--taxonomy-classifier-validation-report",
+            str(classifier_report_path),
+            "--taxonomy-review-queue",
+            str(taxonomy_queue_path),
+            "--taxonomy-application-report",
+            str(taxonomy_application_path),
             "--product-enriched-ads",
             str(enriched_path),
             "--product-enrichment-report",

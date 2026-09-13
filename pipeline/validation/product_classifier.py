@@ -1,7 +1,12 @@
 """Product category classifier using Gemini (via Replicate)."""
 
+# ruff: noqa: E501 -- prompt lines are kept literal because their hash is provenance.
+
 from __future__ import annotations
 
+import hashlib
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -38,6 +43,23 @@ RULES:
 Respond only with JSON matching this schema, no other text:
 {{"is_supplement": true/false, "supplement_type": "vitamin"|"mineral"|"protein"|"herbal"|"skincare"|"fitness"|"other"|"unknown", "confidence": 0.0-1.0, "reasoning": "brief explanation"}}
 """
+
+CLASSIFIER_SCHEMA_VERSION = "supplements-binary-classifier-v1"
+
+
+@lru_cache(maxsize=1)
+def _classification_provenance() -> dict[str, str]:
+    """Bind predictions to the exact prompt, implementation, provider, and model."""
+    from pipeline.config import get_settings
+
+    implementation_sha256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    return {
+        "classifier_schema_version": CLASSIFIER_SCHEMA_VERSION,
+        "provider": "replicate",
+        "model": get_settings().replicate_gemini_model,
+        "prompt_sha256": hashlib.sha256(_PROMPT_TEMPLATE.encode()).hexdigest(),
+        "implementation_sha256": implementation_sha256,
+    }
 
 
 def _fetch_image_bytes(url: str, timeout_s: float = 15.0) -> bytes | None:
@@ -137,6 +159,7 @@ def _classify_one(
             "confidence": 0.0,
             "reasoning": f"classification_error: {last_error!r}",
         }
+    classification["provenance"] = _classification_provenance()
 
     return i, {**ad, "classification": classification}
 

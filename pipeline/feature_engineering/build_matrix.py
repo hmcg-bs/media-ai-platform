@@ -60,6 +60,21 @@ def infer_supplement_subcategory(ad: dict[str, Any]) -> str:
     return "other supplements"
 
 
+def _taxonomy_context(ad: dict[str, Any]) -> tuple[str | None, str]:
+    """Return only subcategory evidence supported by human adjudication.
+
+    A validated binary classifier can admit a Supplements row, but its coarse
+    model category is not evidence for the project's detailed subcategories.
+    """
+    label = ad.get("taxonomy_label") or {}
+    source = str(label.get("source") or "")
+    if source == "human_adjudication":
+        return label.get("supplement_subcategory"), source
+    if source == "validated_classifier":
+        return None, source
+    return None, source
+
+
 def _write_rows(path: Path, rows: list[dict[str, Any]]) -> None:
     """Atomic checkpoint publish; caller owns the output lock."""
     atomic_write_json(path, rows)
@@ -150,12 +165,18 @@ def build_feature_matrix(
         page_id = str(ad.get("page_id") or row.get("page_id") or "")
         row["page_id"] = page_id
         search_queries = ad.get("search_queries", [])
+        taxonomy_subcategory, taxonomy_source = _taxonomy_context(ad)
+        row["taxonomy_label_source"] = taxonomy_source
         row["product_subcategory"] = (
-            (ad.get("taxonomy_label") or {}).get("supplement_subcategory")
-            or (ad.get("product_page") or {}).get("product_subcategory")
-            or ((search_queries or [""])[0])
-            or row.get("product_subcategory")
-            or infer_supplement_subcategory(ad)
+            None
+            if taxonomy_source == "validated_classifier"
+            else (
+                taxonomy_subcategory
+                or (ad.get("product_page") or {}).get("product_subcategory")
+                or ((search_queries or [""])[0])
+                or row.get("product_subcategory")
+                or infer_supplement_subcategory(ad)
+            )
         )
         row["brand_scaling_count"] = scaling_counts.get(page_id, 1)
         rows.append(row)
@@ -188,15 +209,21 @@ def build_feature_matrix(
         if creative_features is not None:
             with_creative_features += 1
         page_id = str(ad.get("page_id") or "")
+        taxonomy_subcategory, taxonomy_source = _taxonomy_context(ad)
         rows.append(
             {
                 "ad_id": ad_id,
                 "page_id": page_id,
+                "taxonomy_label_source": taxonomy_source,
                 "product_subcategory": (
-                    (ad.get("taxonomy_label") or {}).get("supplement_subcategory")
-                    or (ad.get("product_page") or {}).get("product_subcategory")
-                    or ((ad.get("search_queries") or [""])[0])
-                    or infer_supplement_subcategory(ad)
+                    None
+                    if taxonomy_source == "validated_classifier"
+                    else (
+                        taxonomy_subcategory
+                        or (ad.get("product_page") or {}).get("product_subcategory")
+                        or ((ad.get("search_queries") or [""])[0])
+                        or infer_supplement_subcategory(ad)
+                    )
                 ),
                 "brand_scaling_count": scaling_counts.get(page_id, 1),
                 "price_tier": price_tier,

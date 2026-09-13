@@ -286,6 +286,8 @@ def validate_review_artifact(
         "minimum_cohen_kappa": MIN_COHEN_KAPPA,
         "n_disagreements": disagreements,
         "n_adjudicated": adjudicated,
+        "gold_labels": final_labels,
+        "gold_labels_content_sha256": _content_sha256(final_labels),
         "failures": failures,
     }
     return report, approved

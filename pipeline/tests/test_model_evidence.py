@@ -168,3 +168,43 @@ def test_training_taxonomy_gate_accepts_one_provenance_version():
     gate = _taxonomy_gate(ads)
     assert gate["status"] == "passed"
     assert gate["sample_sha256"] == "a" * 64
+
+
+def test_training_taxonomy_gate_accepts_validated_classifier_without_segment_label():
+    ads = [
+        {
+            "ad_archive_id": "1",
+            "taxonomy_label": {
+                "source": "validated_classifier",
+                "is_supplement": True,
+                "supplement_subcategory": None,
+                "provenance": {
+                    "classifier_schema_version": "supplements-binary-classifier-v1",
+                    "provider": "replicate",
+                    "model": "google/gemini-test",
+                    "prompt_sha256": "a" * 64,
+                    "implementation_sha256": "b" * 64,
+                    "confidence": 0.95,
+                    "classifier_validation_report_sha256": "c" * 64,
+                    "gold_sample_sha256": "d" * 64,
+                },
+            },
+        }
+    ]
+    gate = _taxonomy_gate(ads)
+    assert gate["status"] == "passed"
+    assert gate["sources"] == {"validated_classifier": 1}
+
+
+def test_training_taxonomy_gate_rejects_unvalidated_or_low_confidence_classifier():
+    ads = [
+        {
+            "ad_archive_id": "1",
+            "taxonomy_label": {
+                "source": "validated_classifier",
+                "is_supplement": True,
+                "provenance": {"confidence": 0.79},
+            },
+        }
+    ]
+    assert _taxonomy_gate(ads)["status"] == "failed"

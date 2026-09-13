@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -90,38 +91,72 @@ def _git_provenance() -> dict[str, Any]:
 
 
 def _taxonomy_gate(ads: list[dict[str, Any]]) -> dict[str, Any]:
-    """Verify every training ad came through the human adjudication boundary."""
+    """Verify every training ad came through a validated taxonomy boundary."""
     sample_hashes = set()
     label_hashes = set()
+    classifier_report_hashes = set()
+    sources: Counter[str] = Counter()
     failures = []
     for ad in ads:
         label = ad.get("taxonomy_label") or {}
         provenance = label.get("provenance") or {}
         ad_id = str(ad.get("ad_archive_id") or "")
-        if label.get("source") != "human_adjudication" or label.get("is_supplement") is not True:
+        source = str(label.get("source") or "")
+        sources[source or "missing"] += 1
+        if label.get("is_supplement") is not True:
             failures.append(f"ad {ad_id or '<missing>'} lacks an approved human taxonomy label")
-        sample_hash = provenance.get("sample_sha256")
+            continue
+        if source == "human_adjudication":
+            sample_hash = provenance.get("sample_sha256")
+            if not sample_hash or len(str(sample_hash)) != 64:
+                failures.append(f"ad {ad_id or '<missing>'} lacks taxonomy sample provenance")
+            else:
+                sample_hashes.add(str(sample_hash))
+            if (
+                provenance.get("review_schema_version") != "supplements-taxonomy-review-v1"
+                or provenance.get("adjudication_report_schema_version")
+                != "supplements-taxonomy-adjudication-report-v1"
+                or not provenance.get("reviewer_id")
+                or not provenance.get("reviewed_at")
+            ):
+                failures.append(f"ad {ad_id or '<missing>'} has incomplete reviewer provenance")
+            label_hash = provenance.get("approved_labels_content_sha256")
+            if not label_hash or len(str(label_hash)) != 64:
+                failures.append(
+                    f"ad {ad_id or '<missing>'} lacks approved-label content provenance"
+                )
+            else:
+                label_hashes.add(str(label_hash))
+            continue
+        if source != "validated_classifier":
+            failures.append(f"ad {ad_id or '<missing>'} has unsupported taxonomy source {source!r}")
+            continue
+        sample_hash = provenance.get("gold_sample_sha256")
         if not sample_hash or len(str(sample_hash)) != 64:
-            failures.append(f"ad {ad_id or '<missing>'} lacks taxonomy sample provenance")
+            failures.append(f"ad {ad_id or '<missing>'} lacks classifier gold-sample provenance")
         else:
             sample_hashes.add(str(sample_hash))
         if (
-            provenance.get("review_schema_version") != "supplements-taxonomy-review-v1"
-            or provenance.get("adjudication_report_schema_version")
-            != "supplements-taxonomy-adjudication-report-v1"
-            or not provenance.get("reviewer_id")
-            or not provenance.get("reviewed_at")
+            provenance.get("classifier_schema_version") != "supplements-binary-classifier-v1"
+            or provenance.get("provider") != "replicate"
+            or not provenance.get("model")
+            or len(str(provenance.get("prompt_sha256") or "")) != 64
+            or len(str(provenance.get("implementation_sha256") or "")) != 64
+            or not isinstance(provenance.get("confidence"), (int, float))
+            or provenance.get("confidence", 0) < 0.80
         ):
-            failures.append(f"ad {ad_id or '<missing>'} has incomplete reviewer provenance")
-        label_hash = provenance.get("approved_labels_content_sha256")
-        if not label_hash or len(str(label_hash)) != 64:
-            failures.append(f"ad {ad_id or '<missing>'} lacks approved-label content provenance")
+            failures.append(f"ad {ad_id or '<missing>'} has incomplete classifier provenance")
+        classifier_hash = provenance.get("classifier_validation_report_sha256")
+        if not classifier_hash or len(str(classifier_hash)) != 64:
+            failures.append(f"ad {ad_id or '<missing>'} lacks classifier-validation provenance")
         else:
-            label_hashes.add(str(label_hash))
+            classifier_report_hashes.add(str(classifier_hash))
     if len(sample_hashes) > 1:
         failures.append("training ads combine multiple taxonomy sample versions")
     if len(label_hashes) > 1:
         failures.append("training ads combine multiple approved taxonomy label versions")
+    if len(classifier_report_hashes) > 1:
+        failures.append("training ads combine multiple classifier validation versions")
     return {
         "status": "passed" if ads and not failures else "failed",
         "n_training_ads": len(ads),
@@ -129,6 +164,12 @@ def _taxonomy_gate(ads: list[dict[str, Any]]) -> dict[str, Any]:
         "approved_labels_content_sha256": (
             next(iter(label_hashes), None) if len(label_hashes) == 1 else None
         ),
+        "classifier_validation_report_sha256": (
+            next(iter(classifier_report_hashes), None)
+            if len(classifier_report_hashes) == 1
+            else None
+        ),
+        "sources": dict(sorted(sources.items())),
         "failures": failures[:100],
     }
 

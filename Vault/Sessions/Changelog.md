@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Taxonomy-gated, restartable product-site enrichment with a versioned coverage/provenance report
 - Product context features for review volume, description/USP coverage, and subscription status
 - Advertiser-clustered uncertainty and a pre-registered analysis-only proxy/SHAP sensitivity runner
+- Gold-validated, provenance-bound classifier scaling for full-corpus Supplements admission
 
 ### Changed
 - Aligned the competitor-ad Performance proxy to Longevity weighted by page-level Scaling with a Meta collation Variant boost
@@ -54,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adjudicated product subcategory now takes precedence over keyword and landing-page heuristics
 - Model promotion and product-derived generation directives now require product enrichment evidence
 - Model promotion now requires advertiser-clustered confidence intervals with matching cluster counts
+- Automated taxonomy admission now requires lower-confidence-bound precision and recall gates;
+  classifier-only rows cannot support subcategory conclusions
 
 ### Fixed
 - Prevented same-advertiser train/test leakage and same-output concurrent job corruption

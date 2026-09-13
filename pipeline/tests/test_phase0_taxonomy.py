@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pipeline.feature_engineering.build_matrix import _taxonomy_context
 from pipeline.validation.phase0_validator import (
     apply_manual_taxonomy_gate,
     stratified_validation_sample,
@@ -49,3 +50,14 @@ def test_manual_gate_fails_closed_for_unlabeled_ads():
     accepted, counts = apply_manual_taxonomy_gate(ads, labels)
     assert [ad["ad_archive_id"] for ad in accepted] == ["yes"]
     assert counts == {"accepted": 1, "rejected": 1, "unlabeled": 1}
+
+
+def test_validated_binary_classifier_cannot_invent_subcategory_evidence():
+    ad = {
+        "taxonomy_label": {
+            "source": "validated_classifier",
+            "is_supplement": True,
+            "supplement_subcategory": "protein",
+        }
+    }
+    assert _taxonomy_context(ad) == (None, "validated_classifier")

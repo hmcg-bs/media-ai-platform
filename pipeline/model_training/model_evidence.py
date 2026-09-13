@@ -14,6 +14,7 @@ TOP_FRACTION = 0.20
 _EXCLUDED_COLUMNS = {
     "ad_id",
     "page_id",
+    "taxonomy_label_source",
     "title_embedding",
     "body_embedding",
     "usp_embedding",

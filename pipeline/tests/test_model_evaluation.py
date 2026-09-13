@@ -52,6 +52,23 @@ def test_segment_promotion_needs_rows_and_advertiser_diversity() -> None:
     assert segment["promotion_supported"] is True
 
 
+def test_classifier_admitted_rows_cannot_create_subcategory_evidence() -> None:
+    rows = [
+        {
+            "ad_id": str(i),
+            "page_id": f"brand-{i}",
+            "taxonomy_label_source": "validated_classifier",
+            "product_subcategory": "protein",
+            "search_queries": ["protein"],
+        }
+        for i in range(100)
+    ]
+    actual = np.linspace(0, 1, 100)
+    result = segment_metrics(rows, actual, actual.copy(), {}, minimum_size=10)
+
+    assert result["subcategories"] == {}
+
+
 def test_longevity_threshold_stays_null_when_all_ads_are_censored() -> None:
     rows = [
         {"ad_id": str(i), "days_active": i + 10, "search_queries": ["creatine"]} for i in range(20)

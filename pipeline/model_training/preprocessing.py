@@ -21,7 +21,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 # to avoid one target silently leaking into another's feature set.
 TARGET_COLUMNS = ("days_active", "brand_scaling_count", "collation_count")
 
-_ID_COLUMNS = ("ad_id", "page_id")
+_ID_COLUMNS = ("ad_id", "page_id", "taxonomy_label_source")
 _EMBEDDING_COLUMNS = ("title_embedding", "body_embedding", "usp_embedding")
 
 # Cognitive extraction intentionally preserves detailed free-text categories
