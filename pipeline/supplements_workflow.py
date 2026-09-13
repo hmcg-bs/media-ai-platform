@@ -17,6 +17,7 @@ from pathlib import Path
 from pipeline.artifacts import atomic_write_json, exclusive_output
 from pipeline.generation.guide import extract_generation_guide
 from pipeline.validation.phase0_validator import apply_manual_taxonomy_gate
+from pipeline.validation.taxonomy_adjudication import verify_approved_taxonomy
 
 
 def _run_module(module: str, *args: str) -> None:
@@ -43,7 +44,14 @@ def main() -> None:
     parser.add_argument(
         "--taxonomy-labels",
         type=Path,
-        help="Manual labels keyed by ad_id; when set, unlabeled/non-supplement ads fail closed.",
+        required=True,
+        help="Human-adjudicated Supplements labels keyed by ad_id.",
+    )
+    parser.add_argument(
+        "--taxonomy-report",
+        type=Path,
+        required=True,
+        help="Passing adjudication report cryptographically binding --taxonomy-labels.",
     )
     parser.add_argument(
         "--taxonomy-approved-ads",
@@ -64,26 +72,29 @@ def main() -> None:
     if args.skip_ocr and args.reprocess_ocr:
         parser.error("--skip-ocr and --reprocess-ocr cannot be used together")
     lock_target = args.report.with_suffix(args.report.suffix + ".workflow")
-    with exclusive_output(lock_target):
+    with exclusive_output(lock_target), exclusive_output(args.taxonomy_approved_ads):
         if not args.skip_scrape:
             _run_module("ingestion.fresh_corpus_scrape", "--out", str(args.ads))
         if not args.ads.exists():
             parser.error(f"ads corpus not found: {args.ads}")
 
-        workflow_ads = args.ads
-        if args.taxonomy_labels:
-            if not args.taxonomy_labels.exists():
-                parser.error(f"taxonomy labels not found: {args.taxonomy_labels}")
-            ads = json.loads(args.ads.read_text())
-            labels = json.loads(args.taxonomy_labels.read_text())
-            approved, counts = apply_manual_taxonomy_gate(ads, labels)
-            if not approved:
-                parser.error(
-                    "manual taxonomy gate approved zero ads; fill is_supplement labels first"
-                )
-            atomic_write_json(args.taxonomy_approved_ads, approved)
-            workflow_ads = args.taxonomy_approved_ads
-            print(f"Manual taxonomy gate: {counts}; approved={workflow_ads}")
+        if not args.taxonomy_labels.exists():
+            parser.error(f"taxonomy labels not found: {args.taxonomy_labels}")
+        if not args.taxonomy_report.exists():
+            parser.error(f"taxonomy report not found: {args.taxonomy_report}")
+        ads = json.loads(args.ads.read_text())
+        labels = json.loads(args.taxonomy_labels.read_text())
+        taxonomy_report = json.loads(args.taxonomy_report.read_text())
+        try:
+            verify_approved_taxonomy(taxonomy_report, labels)
+        except ValueError as exc:
+            parser.error(str(exc))
+        approved, counts = apply_manual_taxonomy_gate(ads, labels, taxonomy_report)
+        if not approved:
+            parser.error("manual taxonomy gate approved zero ads")
+        atomic_write_json(args.taxonomy_approved_ads, approved)
+        workflow_ads = args.taxonomy_approved_ads
+        print(f"Manual taxonomy gate: {counts}; approved={workflow_ads}")
 
         sample_args = ["--sample-size", str(args.sample_size)] if args.sample_size else []
         if not args.skip_extraction:

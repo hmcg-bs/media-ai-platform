@@ -339,7 +339,9 @@ def evaluate_classification_accuracy(
 
 
 def apply_manual_taxonomy_gate(
-    ads: list[dict], labels: list[dict]
+    ads: list[dict],
+    labels: list[dict],
+    adjudication_report: dict | None = None,
 ) -> tuple[list[dict], dict[str, int]]:
     """Fail closed: only explicitly human-approved Supplements ads pass."""
     labels_by_id = {
@@ -354,14 +356,27 @@ def apply_manual_taxonomy_gate(
         if label is None:
             counts["unlabeled"] += 1
         elif label["is_supplement"] is True:
+            provenance = dict(label.get("taxonomy_provenance") or {})
+            if adjudication_report is not None:
+                provenance.update(
+                    {
+                        "adjudication_report_schema_version": adjudication_report.get(
+                            "report_schema_version"
+                        ),
+                        "approved_labels_content_sha256": adjudication_report.get(
+                            "approved_labels_content_sha256"
+                        ),
+                    }
+                )
             accepted.append(
                 {
                     **ad,
                     "taxonomy_label": {
-                        "source": "manual",
+                        "source": "human_adjudication",
                         "is_supplement": True,
                         "supplement_subcategory": label.get("supplement_subcategory"),
                         "notes": label.get("notes", ""),
+                        "provenance": provenance,
                     },
                 }
             )

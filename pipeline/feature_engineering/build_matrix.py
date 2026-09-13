@@ -126,9 +126,7 @@ def build_feature_matrix(
         # a strict superset under random.sample(). Retain paid embeddings only
         # for rows in this run's exact sample; otherwise resume silently grows
         # beyond --sample-size and makes the report irreproducible.
-        existing_rows = [
-            row for row in existing_rows if str(row.get("ad_id")) in selected_ids
-        ]
+        existing_rows = [row for row in existing_rows if str(row.get("ad_id")) in selected_ids]
     rows: list[dict[str, Any]] = []
     for existing in existing_rows:
         row = dict(existing)
@@ -139,8 +137,12 @@ def build_feature_matrix(
         creative = creative_by_id.get(str(row.get("ad_id")))
         if creative is not None:
             color_keys = {
-                "background_hex", "background_style", "dominant_hex_palette",
-                "contrast_ratio_type", "ad_id", "aspect_ratio",
+                "background_hex",
+                "background_style",
+                "dominant_hex_palette",
+                "contrast_ratio_type",
+                "ad_id",
+                "aspect_ratio",
             }
             for key, value in creative.items():
                 if key not in color_keys:
@@ -149,7 +151,8 @@ def build_feature_matrix(
         row["page_id"] = page_id
         search_queries = ad.get("search_queries", [])
         row["product_subcategory"] = (
-            (ad.get("product_page") or {}).get("product_subcategory")
+            (ad.get("taxonomy_label") or {}).get("supplement_subcategory")
+            or (ad.get("product_page") or {}).get("product_subcategory")
             or ((search_queries or [""])[0])
             or row.get("product_subcategory")
             or infer_supplement_subcategory(ad)
@@ -185,18 +188,21 @@ def build_feature_matrix(
         if creative_features is not None:
             with_creative_features += 1
         page_id = str(ad.get("page_id") or "")
-        rows.append({
-            "ad_id": ad_id,
-            "page_id": page_id,
-            "product_subcategory": (
-                (ad.get("product_page") or {}).get("product_subcategory")
-                or ((ad.get("search_queries") or [""])[0])
-                or infer_supplement_subcategory(ad)
-            ),
-            "brand_scaling_count": scaling_counts.get(page_id, 1),
-            "price_tier": price_tier,
-            **features,
-        })
+        rows.append(
+            {
+                "ad_id": ad_id,
+                "page_id": page_id,
+                "product_subcategory": (
+                    (ad.get("taxonomy_label") or {}).get("supplement_subcategory")
+                    or (ad.get("product_page") or {}).get("product_subcategory")
+                    or ((ad.get("search_queries") or [""])[0])
+                    or infer_supplement_subcategory(ad)
+                ),
+                "brand_scaling_count": scaling_counts.get(page_id, 1),
+                "price_tier": price_tier,
+                **features,
+            }
+        )
         already_have_ids.add(ad_id)
         price_tier_counts[price_tier] += 1
         hook_framework_counts[features.get("creative_hook_framework") or "null"] += 1
@@ -224,24 +230,30 @@ def main() -> None:
     parser.add_argument("--step2-out", type=Path, default=STEP2_OUT_DIR)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUTPUT_FILE)
     parser.add_argument(
-        "--sample-size", type=int, default=None,
+        "--sample-size",
+        type=int,
+        default=None,
         help="Process a random sample instead of the full corpus (for pilots -- "
         "embeddings make a real paid API call per ad).",
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
-        "--checkpoint-every", type=int, default=25,
+        "--checkpoint-every",
+        type=int,
+        default=25,
         help="Flush progress to --out every N newly-processed ads, so a crash "
         "(e.g. a transient network error after retries are exhausted) doesn't "
         "lose the whole run.",
     )
     parser.add_argument(
-        "--no-resume", action="store_true",
+        "--no-resume",
+        action="store_true",
         help="Ignore any existing --out file and reprocess every ad from scratch "
         "(default: resume, skipping ad_ids already present in --out).",
     )
     parser.add_argument(
-        "--skip-embeddings", action="store_true",
+        "--skip-embeddings",
+        action="store_true",
         help="Build deterministic/creative features without paid Replicate embeddings.",
     )
     args = parser.parse_args()
@@ -256,10 +268,13 @@ def main() -> None:
     start = time.monotonic()
     with exclusive_output(args.out):
         rows, summary = build_feature_matrix(
-            ads_file=args.ads, step2_out_dir=args.step2_out,
-            sample_size=args.sample_size, seed=args.seed,
+            ads_file=args.ads,
+            step2_out_dir=args.step2_out,
+            sample_size=args.sample_size,
+            seed=args.seed,
             existing_rows=existing_rows,
-            checkpoint_path=args.out, checkpoint_every=args.checkpoint_every,
+            checkpoint_path=args.out,
+            checkpoint_every=args.checkpoint_every,
             include_embeddings=not args.skip_embeddings,
         )
         _write_rows(args.out, rows)
