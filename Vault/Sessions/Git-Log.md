@@ -14,3 +14,5 @@ Detailed commit history with dates, branches, and descriptions.
 | 2026-09-12 | auto/meta-ads-model-pipeline | 153e0e0 | Gate generation guidance on model evaluation |
 | 2026-09-12 | auto/meta-ads-model-pipeline | d94c2c1 | Log supplements workflow results |
 | 2026-09-12 | auto/meta-ads-model-pipeline | 3d2eac0 | Harden expanded extraction under API limits |
+| 2026-09-12 | auto/meta-ads-model-pipeline | 0c1a75a | Log expanded evaluation |
+| 2026-09-12 | auto/meta-ads-model-pipeline | 89338df | Configure keyless GCP auth for Amp orbs |

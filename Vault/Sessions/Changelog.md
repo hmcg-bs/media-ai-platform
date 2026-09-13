@@ -21,12 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deep visual product, prop, relationship, texture, and human feature representation
 - Cloud Vision OCR/color backfill that preserves completed cognitive extraction
 - Capacity-safe no-embedding evaluation mode
+- Keyless Amp OIDC → Google Workload Identity Federation authentication for orbs
+- Atomic, idempotent external-account ADC lifecycle generation and contract tests
 
 ### Changed
 - Aligned the competitor-ad Performance proxy to Longevity weighted by page-level Scaling with a Meta collation Variant boost
 - Preserved extraction missingness and active ads as right-censored observations during model preparation
 - Generation guidance now consumes the integrated training report and excludes unevaluable survival coefficients
 - Expanded the Supplements advertiser holdout from 35 to 101 ads
+- GCP auth health reporting now distinguishes renewable WIF from user ADC
 
 ### Fixed
 - Prevented same-advertiser train/test leakage and same-output concurrent job corruption

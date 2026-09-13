@@ -1,15 +1,13 @@
-"""Report which GCP credential is actually in use and how long it will last.
+"""Report which GCP credential is actually in use and whether it can refresh.
 
 Run this before leaving the crew unattended, and any time a run dies with
 `RefreshError: Reauthentication is needed`.
 
     uv run python scripts/check_auth_health.py
 
-Background: a *user* credential (`gcloud auth application-default login`) on a
-Google Workspace domain is governed by "Google Cloud session control", capped
-at a maximum of 24 hours — so it cannot survive a week. A *service-account
-key* is not tied to a user session and does not expire. This script tells you
-which one you have.
+Amp orbs should use keyless Workload Identity Federation (WIF), documented in
+``docs/gcp-orb-auth.md``. Local workstations may still use user ADC. This script
+distinguishes those modes without printing credential or token contents.
 """
 
 from __future__ import annotations
@@ -43,12 +41,17 @@ def main() -> int:
     settings = get_settings()
 
     print("\n=== GCP auth health ===\n")
-    print(f"Project: {settings.gcp_project_id}   Location: {settings.vertex_location}\n")
+    project = settings.gcp_project_id
+    print(f"Project: {project or '(missing)'}   Location: {settings.vertex_location}\n")
+    if not project:
+        _bad("GCP_PROJECT_ID is missing")
+        print("    Configure it in the Amp project environment; see docs/gcp-orb-auth.md.\n")
 
     # ── Which credential will gcp_auth.resolve_credentials() actually pick? ──
     print("Credential resolution (pipeline/clients/gcp_auth.py order):")
     key_path = settings.google_application_credentials_path
     impersonate = settings.impersonate_service_account
+    adc_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
 
     mode: str
     if key_path:
@@ -67,6 +70,26 @@ def main() -> int:
         print(f"    {DIM}Impersonation still mints tokens from your user ADC, so it does{RESET}")
         print(f"    {DIM}NOT escape the Workspace session cap. Confirmed live, Round 4.{RESET}")
         mode = "impersonation"
+    elif adc_path:
+        adc_file = Path(adc_path)
+        if not adc_file.is_file():
+            _bad(f"GOOGLE_APPLICATION_CREDENTIALS file missing  →  {adc_path}")
+            print("\n    Fix the Amp WIF environment; see docs/gcp-orb-auth.md.\n")
+            return 1
+        try:
+            credential_type = json.loads(adc_file.read_text()).get("type")
+        except (OSError, json.JSONDecodeError) as exc:
+            _bad(f"GOOGLE_APPLICATION_CREDENTIALS is unreadable: {type(exc).__name__}")
+            return 1
+        if credential_type == "external_account":
+            _ok(f"keyless external-account WIF  →  {adc_path}")
+            mode = "wif"
+        elif credential_type == "service_account":
+            _warn(f"service-account key via ADC  →  {adc_path}")
+            mode = "sa_key"
+        else:
+            _warn(f"ADC file type {credential_type!r}  →  {adc_path}")
+            mode = "user_adc"
     else:
         _warn("plain user ADC (no key, no impersonation)")
         mode = "user_adc"
@@ -92,8 +115,14 @@ def main() -> int:
         name = type(e).__name__
         if "Reauth" in str(e) or "RefreshError" in name:
             _bad(f"{name}: reauthentication required NOW")
-            print("\n    Fix immediately:  gcloud auth application-default login")
-            print("    Fix permanently:  bash scripts/setup_service_account_auth.sh\n")
+            if mode == "wif":
+                print(
+                    "\n    Inspect the WIF provider and Amp environment; "
+                    "see docs/gcp-orb-auth.md.\n"
+                )
+            else:
+                print("\n    Local only: gcloud auth application-default login")
+                print("    Amp orb: configure WIF using docs/gcp-orb-auth.md.\n")
         else:
             _bad(f"{name}: {str(e)[:180]}")
             print(f"\n    {DIM}If this is an SSLError it is usually a transient network{RESET}")
@@ -102,7 +131,11 @@ def main() -> int:
 
     # ── The verdict that actually matters ──
     print("\nHow long will this survive unattended?\n")
-    if mode == "sa_key":
+    if mode == "wif":
+        print(f"  {GREEN}AUTOMATICALLY REFRESHABLE.{RESET} Amp mints short-lived OIDC tokens")
+        print("  on demand; no user session or long-lived key is involved.\n")
+        verdict = 0
+    elif mode == "sa_key":
         print(f"  {GREEN}INDEFINITELY.{RESET} Service-account keys are not tied to a user")
         print("  session and do not expire. Safe for a week or longer.\n")
         print(f"  {DIM}Remember to delete the key when the unattended period ends —{RESET}")
@@ -113,7 +146,7 @@ def main() -> int:
         print("  Google Workspace 'Google Cloud session control' policy caps at 24h")
         print("  maximum (there is no never-expires option). A week is not possible")
         print("  this way, regardless of how recently you logged in.\n")
-        print(f"  To fix: {GREEN}bash scripts/setup_service_account_auth.sh{RESET}")
+        print(f"  In an Amp orb, fix this with {GREEN}docs/gcp-orb-auth.md{RESET}.")
         verdict = 2
 
     # ── Non-GCP credentials the crew also needs ──
@@ -122,9 +155,9 @@ def main() -> int:
         "REPLICATE_API_TOKEN missing — Flux Fill / background-remover will fail"
     )
     if settings.apify_api_token:
-        _warn("APIFY_API_TOKEN set, but the account was quota-blocked at last check")
+        _ok("APIFY_API_TOKEN set")
     print()
-    return verdict
+    return verdict if project else 1
 
 
 if __name__ == "__main__":

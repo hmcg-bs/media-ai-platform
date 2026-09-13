@@ -24,8 +24,8 @@ touching `master`, or data deletion. See
 
 ## 2026-08-30 — Known blockers carried in from handover (pre-existing, not crew-generated)
 
-**1. GCP auth expiry — ROOT-CAUSED, fix available, ACTION REQUIRED before a
-long away-period.** Vertex Gemini calls periodically fail with
+**1. GCP auth expiry — ROOT-CAUSED; keyless orb fix implemented, GOOGLE ADMIN
+SETUP REQUIRED.** Vertex Gemini calls periodically fail with
 `RefreshError: Reauthentication is needed`.
 
 *Root cause* (diagnosed 2026-08-30): ADC is a **user** credential
@@ -37,28 +37,17 @@ buys a week. Service-account *impersonation* does not escape it either
 credential. Current state verified via `scripts/check_auth_health.py`:
 impersonation mode, 24h ceiling.
 
-*Fix*: use a service-account **key**, which is not tied to a user session and
-does not expire. `pipeline/clients/gcp_auth.py` already supports this — it
-only needs `GOOGLE_APPLICATION_CREDENTIALS_PATH` in `.env`. No code change.
+*Fix*: use Amp OIDC with Google Workload Identity Federation, not a
+service-account key. The repository lifecycle/helper implementation and exact
+administrator commands are in `docs/gcp-orb-auth.md`. The owner must create the
+Google pool/provider and IAM bindings, then add `GCP_PROJECT_ID` and the full
+`GCP_WIF_PROVIDER` resource to the Amp project environment. Verify afterwards
+with `uv run python scripts/check_auth_health.py`.
 
-    bash scripts/setup_service_account_auth.sh
-
-The one thing that may block it: the org policy
-`constraints/iam.disableServiceAccountKeyCreation`. The script detects this
-and prints exact override instructions (you likely have the rights, being on
-your own Workspace domain). Verify afterwards with
-`uv run python scripts/check_auth_health.py` — exit 0 means indefinite.
-
-**Delete the key when the away-period ends** (teardown commands are printed
-by the setup script). `secrets/` is now gitignored so the key can't be
-committed.
-
-**2. Apify monthly usage hard limit exceeded** — blocks
-`ingestion/refresh_image_urls.py`, which is the only durable fix for
-Facebook CDN signed-URL expiry. Consequence: `get_top_reference_ads()` returns
-0 ads, so Generation's feature-fidelity gate is inert (it correctly reports
-`checked=False` rather than fabricating a verdict). Needs the quota window to
-reset or the account limit raised.
+**2. Apify quota — RESOLVED 2026-09-12.** The owner reset the quota and the
+supplements scrape completed all 12 queries: 3,555 unique image ads across
+1,151 pages. Facebook CDN URLs still expire, so resumable refresh/download
+artifacts remain necessary, but account quota is no longer the blocker.
 
 **3. Bug #14 — product decision, deliberately not decided by the crew**:
 should `validate_layout()`'s `zones_respected=False` finding gate the

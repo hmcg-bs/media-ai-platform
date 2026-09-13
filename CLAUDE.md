@@ -85,7 +85,8 @@ Managed with **`uv`** (Python pinned to **3.12** — the version GCP runtimes an
 opencv/google wheels support; the system's 3.14 is not deployable).
 
 ```bash
-gcloud auth application-default login    # ADC for Cloud Vision + Vertex AI
+# Local workstation only; Amp orbs use keyless WIF (docs/gcp-orb-auth.md):
+gcloud auth application-default login
 uv run python -m pipeline.orchestrator --input ./examples --out ./out
 ```
 

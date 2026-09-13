@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Google invokes this executable through its external-account credential
+# provider. Never enable shell tracing here: the minted ID token is sensitive.
+: "${AMP_GCP_AUDIENCE:?Set AMP_GCP_AUDIENCE in the Amp project environment}"
+
+token="$(amp orb id-token --audience "$AMP_GCP_AUDIENCE")"
+AMP_ID_TOKEN="$token" python3 - <<'PY'
+import base64
+import json
+import os
+
+token = os.environ["AMP_ID_TOKEN"]
+try:
+    payload = token.split(".")[1]
+    payload += "=" * (-len(payload) % 4)
+    expiration = json.loads(base64.urlsafe_b64decode(payload))["exp"]
+except (IndexError, KeyError, ValueError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"amp orb id-token returned an invalid JWT: {exc}") from exc
+
+print(json.dumps({
+    "version": 1,
+    "success": True,
+    "token_type": "urn:ietf:params:oauth:token-type:id_token",
+    "id_token": token,
+    "expiration_time": expiration,
+}))
+PY

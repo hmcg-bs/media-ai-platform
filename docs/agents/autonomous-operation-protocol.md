@@ -108,9 +108,11 @@ Flux Fill; Vertex: 5-6 Gemini calls per attempt). A 3-variant run is roughly
   `uv run python scripts/check_auth_health.py` at session start. It reports
   which credential is actually in use and, critically, **how long it will
   last**:
+  - **Amp Workload Identity Federation** (`external_account`) → preferred for
+    orbs. Amp OIDC and Google STS rotate short-lived tokens automatically; no
+    user session or long-lived key is involved. See `docs/gcp-orb-auth.md`.
   - **Service-account key** (`GOOGLE_APPLICATION_CREDENTIALS_PATH` set) →
-    does not expire. Safe for long unattended runs. This is the intended
-    setup; `scripts/setup_service_account_auth.sh` establishes it.
+    does not expire, but is a long-lived secret and is not the orb setup.
   - **User ADC or impersonation** → **24 hours maximum.** A Google Workspace
     "Google Cloud session control" policy caps user sessions at 24h and offers
     no never-expires option. Impersonation does *not* escape this — it still

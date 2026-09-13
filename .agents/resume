@@ -1,7 +1,55 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Dependencies are restored from the orb snapshot. Cloud-backed commands use
-# credentials supplied through the orb environment; authentication is never
-# performed interactively during setup or resume.
+# Dependencies are restored from the orb snapshot. Build the non-secret Google
+# external-account configuration on every resume; short-lived Amp OIDC tokens
+# are minted only on demand by scripts/amp-gcp-identity and are never persisted.
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+credential_path="${GOOGLE_APPLICATION_CREDENTIALS:-}"
+provider="${GCP_WIF_PROVIDER:-}"
+
+if [[ -n "${AMP_GCP_AUDIENCE:-}" || -n "$credential_path" || -n "$provider" ]]; then
+  if [[ -z "${AMP_GCP_AUDIENCE:-}" || -z "$credential_path" || -z "$provider" || "${GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES:-}" != "1" ]]; then
+    printf >&2 '%s\n' \
+      'GCP Workload Identity is incomplete; set AMP_GCP_AUDIENCE, GCP_WIF_PROVIDER,' \
+      'GOOGLE_APPLICATION_CREDENTIALS, and GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES=1.'
+  elif [[ ! "$provider" =~ ^projects/[0-9]+/locations/global/workloadIdentityPools/[a-z0-9-]+/providers/[a-z0-9-]+$ ]]; then
+    printf >&2 'GCP_WIF_PROVIDER is not a full Google provider resource: %s\n' "$provider"
+  else
+    mkdir -p -- "$(dirname "$credential_path")"
+    temporary_path="$(mktemp "${credential_path}.tmp.XXXXXX")"
+    trap 'rm -f -- "$temporary_path"' EXIT
+    python3 - "$provider" "$repo_root/scripts/amp-gcp-identity" \
+      "${GCP_WIF_SERVICE_ACCOUNT:-}" >"$temporary_path" <<'PY'
+import json
+import sys
+
+provider, helper, service_account = sys.argv[1:]
+config = {
+    "type": "external_account",
+    "audience": f"//iam.googleapis.com/{provider}",
+    "subject_token_type": "urn:ietf:params:oauth:token-type:id_token",
+    "token_url": "https://sts.googleapis.com/v1/token",
+    "credential_source": {
+        "executable": {
+            "command": helper,
+            "timeout_millis": 30000,
+        }
+    },
+}
+if service_account:
+    config["service_account_impersonation_url"] = (
+        "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/"
+        f"{service_account}:generateAccessToken"
+    )
+json.dump(config, sys.stdout, indent=2)
+sys.stdout.write("\n")
+PY
+    chmod 600 "$temporary_path"
+    mv -f -- "$temporary_path" "$credential_path"
+    trap - EXIT
+    printf 'Google Workload Identity credential configured at %s.\n' "$credential_path"
+  fi
+fi
+
 printf 'Orb environment resumed; use uv run for Python commands.\n'
