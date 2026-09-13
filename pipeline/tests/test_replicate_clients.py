@@ -15,6 +15,7 @@ from pipeline.clients.replicate_client import (
     QwenLayersClient,
     QwenVLClient,
     _is_retryable,
+    _retry_after_seconds,
     _to_bytes,
 )
 from pipeline.config import Settings
@@ -179,6 +180,14 @@ def test_is_retryable_covers_transient_httpx_transport_errors():
     assert _is_retryable(httpx.RemoteProtocolError("Server disconnected")) is True
     assert _is_retryable(httpx.ConnectError("x")) is True
     assert _is_retryable(httpx.ReadError("x")) is True
+
+
+def test_extracts_low_credit_rate_limit_reset_hint():
+    error = RuntimeError(
+        "Request was throttled. Your rate limit resets in ~8.5s."
+    )
+    assert _retry_after_seconds(error) == 8.5
+    assert _retry_after_seconds(RuntimeError("server unavailable")) is None
 
 
 def test_retries_on_remote_protocol_error_then_succeeds():

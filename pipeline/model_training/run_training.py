@@ -70,12 +70,20 @@ def run(
     )
 
     model_results: dict[str, dict[str, Any]] = {}
+    has_embeddings = any(
+        row.get(name)
+        for row in rows
+        for name in ("title_embedding", "body_embedding", "usp_embedding")
+    )
 
     # Primary question: which creative features distinguish top ads under the
     # project's complete Longevity × Scaling + Variant proxy? Keep this on raw
     # rows so target-derived cluster summaries cannot leak into the label fit.
     model_results["composite_success_score"] = {}
-    for label, include_embeddings in (("with_embeddings", True), ("without_embeddings", False)):
+    composite_variants = [("without_embeddings", False)]
+    if has_embeddings:
+        composite_variants.insert(0, ("with_embeddings", True))
+    for label, include_embeddings in composite_variants:
         composite = train_and_explain(
             rows,
             include_embeddings=include_embeddings,
@@ -130,7 +138,10 @@ def run(
     # --- collation_count / variants_featured_count: XGBoost regression ---
     for target in REGRESSION_TARGETS:
         model_results[target] = {}
-        for label, include_embeddings in (("with_embeddings", True), ("without_embeddings", False)):
+        regression_variants = [("without_embeddings", False)]
+        if has_embeddings:
+            regression_variants.insert(0, ("with_embeddings", True))
+        for label, include_embeddings in regression_variants:
             X_tr, y_tr = build_xy(train_rows, target, include_embeddings=include_embeddings)
             X_te, y_te = build_xy(test_rows, target, include_embeddings=include_embeddings)
             if len(y_tr) < 20 or len(y_te) < 5:
@@ -149,6 +160,7 @@ def run(
             "ads_sha256": _sha256(ads_file),
             "random_state": random_state,
             "workers_per_model": n_jobs,
+            "embeddings_available": has_embeddings,
         },
         "quality_report": {
             "columns": quality_report["columns"],

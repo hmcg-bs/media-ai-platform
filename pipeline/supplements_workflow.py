@@ -36,10 +36,18 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--skip-scrape", action="store_true")
     parser.add_argument("--skip-extraction", action="store_true")
+    parser.add_argument("--skip-ocr", action="store_true")
+    parser.add_argument("--skip-embeddings", action="store_true")
+    parser.add_argument(
+        "--reprocess-ocr", action="store_true",
+        help="Backfill OCR for existing Step 2 artifacts without repeating cognitive calls.",
+    )
     args = parser.parse_args()
 
     if args.concurrency < 1:
         parser.error("--concurrency must be at least 1")
+    if args.skip_ocr and args.reprocess_ocr:
+        parser.error("--skip-ocr and --reprocess-ocr cannot be used together")
     lock_target = args.report.with_suffix(args.report.suffix + ".workflow")
     with exclusive_output(lock_target):
         if not args.skip_scrape:
@@ -49,16 +57,22 @@ def main() -> None:
 
         sample_args = ["--sample-size", str(args.sample_size)] if args.sample_size else []
         if not args.skip_extraction:
+            ocr_args = ["--skip-ocr"] if args.skip_ocr else []
+            repair_ocr_args = ["--reprocess-ocr"] if args.reprocess_ocr else []
             _run_module(
                 "ingestion.run_step2_pipeline",
                 "--ads", str(args.ads), "--out", str(args.step2_out),
-                "--cognitive-provider", "replicate", "--skip-ocr",
+                "--cognitive-provider", "replicate", *ocr_args,
+                "--reprocess-incomplete-cognitive",
+                *repair_ocr_args,
                 "--concurrency", str(args.concurrency), *sample_args,
             )
         _run_module(
             "pipeline.feature_engineering.build_matrix",
             "--ads", str(args.ads), "--step2-out", str(args.step2_out),
-            "--out", str(args.matrix), *sample_args,
+            "--out", str(args.matrix),
+            *(["--skip-embeddings"] if args.skip_embeddings else []),
+            *sample_args,
         )
         _run_module(
             "pipeline.model_training.run_training",

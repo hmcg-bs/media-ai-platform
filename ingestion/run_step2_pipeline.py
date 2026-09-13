@@ -34,9 +34,11 @@ from ingestion.download import _get_extension_from_url
 from pipeline.artifacts import atomic_write_json, exclusive_output
 from pipeline.config import get_settings
 from pipeline.logger import configure_logging, get_logger
+from pipeline.models.output_schema import ExtractionResult
 from pipeline.orchestrator import build_default_stages, run_one
 from pipeline.stages.base_stage import BaseStage
 from pipeline.stages.stage_01_metadata import MetadataStage
+from pipeline.stages.stage_02_ocr import OCRStage
 from pipeline.stages.stage_03_color import ColorStage
 from pipeline.stages.stage_05_cognitive import CognitiveStage
 
@@ -64,12 +66,23 @@ def fetch_image_bytes(url: str, timeout: int = 10) -> bytes | None:
 _Outcome = str  # one of "processed" / "no_images" / "fetch_failed" / "error"
 
 
+def _cognitive_incomplete(result: ExtractionResult) -> bool:
+    spatial = result.spatial_and_nested_objects
+    return not (
+        spatial.primary_product.name
+        or spatial.secondary_props
+        or spatial.object_relationships
+        or spatial.texture_demonstration.visible
+    )
+
+
 def _process_one_ad(
     ad: dict,
     ad_id: str,
     out_dir: Path,
     stages: list[BaseStage],
     fetch_fn: Callable[[str], bytes | None],
+    repair_stages: list[BaseStage] | None = None,
 ) -> _Outcome:
     """Fetch -> run stage chain -> write JSON for one ad. Returns an outcome
     string rather than mutating shared counters directly, so this is safe to
@@ -99,8 +112,16 @@ def _process_one_ad(
             return "fetch_failed"
 
         ext = _get_extension_from_url(url)
-        context = run_one(Path(f"{ad_id}.{ext}"), stages, image_bytes=image_bytes)
         out_path = out_dir / f"{ad_id}.json"
+        initial_result = None
+        run_stages = stages
+        if repair_stages is not None:
+            initial_result = ExtractionResult.model_validate_json(out_path.read_text())
+            run_stages = repair_stages
+        context = run_one(
+            Path(f"{ad_id}.{ext}"), run_stages, image_bytes=image_bytes,
+            initial_result=initial_result,
+        )
         atomic_write_json(out_path, context.result.model_dump(mode="json"))
         logger.info("step2_asset_written", ad_id=ad_id, failed_stages=context.failed_stages)
         return "processed"
@@ -117,6 +138,8 @@ def run_step2_pipeline(
     stages: list[BaseStage] | None = None,
     fetch_fn: Callable[[str], bytes | None] = fetch_image_bytes,
     concurrency: int = 1,
+    reprocess_incomplete_cognitive: bool = False,
+    reprocess_ocr: bool = False,
 ) -> int:
     """Processes every ad in ``ads_file`` (or a random sample of
     ``sample_size``) through the Step 2 stage chain, writing one JSON per ad
@@ -155,16 +178,35 @@ def run_step2_pipeline(
     # Resumability check stays sequential and up front, before any ad is
     # dispatched to a worker — preserves the existing "never even attempt a
     # fetch for an already-done ad" guarantee regardless of concurrency.
-    pending: list[tuple[dict, str]] = []
+    pending: list[tuple[dict, str, list[BaseStage] | None]] = []
     for ad in ads:
         ad_id = ad.get("ad_archive_id")
         if not ad_id:
             continue
         out_path = out_dir / f"{ad_id}.json"
         if out_path.exists():
+            try:
+                existing = ExtractionResult.model_validate_json(out_path.read_text())
+            except (ValueError, OSError):
+                pending.append((ad, ad_id, None))
+                continue
+            repair_stages: list[BaseStage] = []
+            if reprocess_ocr:
+                # Color consumes OCR boxes to mask text before clustering, so
+                # rerun it alongside OCR while preserving paid cognitive output.
+                repair_stages.extend(
+                    stage for stage in stages if isinstance(stage, (OCRStage, ColorStage))
+                )
+            if reprocess_incomplete_cognitive and _cognitive_incomplete(existing):
+                repair_stages.extend(
+                    stage for stage in stages if isinstance(stage, CognitiveStage)
+                )
+            if repair_stages:
+                pending.append((ad, ad_id, repair_stages))
+                continue
             skipped_existing += 1
             continue
-        pending.append((ad, ad_id))
+        pending.append((ad, ad_id, None))
 
     def _tally(outcome: _Outcome) -> None:
         nonlocal processed, skipped_no_images, fetch_failed, errored
@@ -178,13 +220,15 @@ def run_step2_pipeline(
             errored += 1
 
     if concurrency <= 1:
-        for ad, ad_id in pending:
-            _tally(_process_one_ad(ad, ad_id, out_dir, stages, fetch_fn))
+        for ad, ad_id, repair_stages in pending:
+            _tally(_process_one_ad(ad, ad_id, out_dir, stages, fetch_fn, repair_stages))
     else:
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
             futures = {
-                pool.submit(_process_one_ad, ad, ad_id, out_dir, stages, fetch_fn): ad_id
-                for ad, ad_id in pending
+                pool.submit(
+                    _process_one_ad, ad, ad_id, out_dir, stages, fetch_fn, repair_stages
+                ): ad_id
+                for ad, ad_id, repair_stages in pending
             }
             for future in as_completed(futures):
                 _tally(future.result())
@@ -223,6 +267,15 @@ def main() -> None:
         "missing OCR features remain explicit.",
     )
     parser.add_argument(
+        "--reprocess-incomplete-cognitive", action="store_true",
+        help="Repair existing artifacts whose deep cognitive extraction is empty.",
+    )
+    parser.add_argument(
+        "--reprocess-ocr", action="store_true",
+        help="Backfill Cloud Vision OCR and OCR-masked color for existing artifacts "
+        "without repeating cognitive extraction.",
+    )
+    parser.add_argument(
         "--concurrency",
         type=int,
         default=4,
@@ -230,6 +283,8 @@ def main() -> None:
         "mostly network I/O wait, so this is the main speed lever).",
     )
     args = parser.parse_args()
+    if args.skip_ocr and args.reprocess_ocr:
+        parser.error("--skip-ocr and --reprocess-ocr cannot be used together")
 
     settings = get_settings()
     configure_logging(settings.log_level)
@@ -262,6 +317,8 @@ def main() -> None:
             seed=args.seed,
             stages=stages,
             concurrency=args.concurrency,
+            reprocess_incomplete_cognitive=args.reprocess_incomplete_cognitive,
+            reprocess_ocr=args.reprocess_ocr,
         )
     print(f"Processed {count} ad(s) -> {args.out}")
 

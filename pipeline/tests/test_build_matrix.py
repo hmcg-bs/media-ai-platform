@@ -17,13 +17,21 @@ def _fake_embedding_client() -> EmbeddingClient:
     return EmbeddingClient(run=run)
 
 
-def _write_step2_result(out_dir: Path, ad_id: str, hook_framework: str = "PAS") -> None:
+def _write_step2_result(
+    out_dir: Path,
+    ad_id: str,
+    hook_framework: str = "PAS",
+    product_visual_state: str = "",
+) -> None:
     doc = {
         "ad_id": ad_id,
         "technical_metadata": {"aspect_ratio": "1:1"},
         "copywriting_features": {},
         "placement": {},
         "marketing_psychology": {"hook_framework": hook_framework},
+        "spatial_and_nested_objects": {
+            "primary_product": {"visual_state": product_visual_state}
+        },
         "color_profile": {"dominant_hex_palette": ["#FF0000"]},
     }
     (out_dir / f"{ad_id}.json").write_text(json.dumps(doc))
@@ -185,6 +193,23 @@ class TestBuildFeatureMatrix:
         assert rows[0]["creative_hook_framework"] is None
         assert summary["with_creative_features"] == 0
 
+    def test_can_build_without_paid_embeddings(self, tmp_path):
+        ads_file, step2_dir = self._setup(tmp_path)
+
+        def fail_if_called(model, inputs):
+            raise AssertionError("embedding API must not be called")
+
+        rows, summary = build_feature_matrix(
+            ads_file=ads_file,
+            step2_out_dir=step2_dir,
+            embedding_client=EmbeddingClient(run=fail_if_called),
+            include_embeddings=False,
+        )
+
+        assert len(rows) == 2
+        assert summary["embeddings_included"] is False
+        assert all(row["title_embedding"] == [] for row in rows)
+
 
 class TestBuildFeatureMatrixResilience:
     """Regression: a real full-corpus run crashed with zero rows written
@@ -241,6 +266,44 @@ class TestBuildFeatureMatrixResilience:
         assert {r["ad_id"] for r in rows} == {"1", "2", "3"}
         assert summary["row_count"] == 3
         assert "Buy Now" not in calls  # ad "1" was skipped, never re-embedded
+
+    def test_resume_discards_rows_outside_current_sample(self, tmp_path):
+        ads_file, step2_dir = self._setup(tmp_path)
+        existing_rows = [
+            {"ad_id": ad_id, "price_tier": "mid", "creative_hook_framework": "PAS"}
+            for ad_id in ("1", "2", "3")
+        ]
+
+        rows, summary = build_feature_matrix(
+            ads_file=ads_file,
+            step2_out_dir=step2_dir,
+            sample_size=1,
+            seed=42,
+            embedding_client=_fake_embedding_client(),
+            existing_rows=existing_rows,
+        )
+
+        assert len(rows) == summary["row_count"] == 1
+
+    def test_resume_refreshes_repaired_cognitive_features_without_reembedding(
+        self, tmp_path
+    ):
+        ads_file, step2_dir = self._setup(tmp_path)
+        _write_step2_result(step2_dir, "1", product_visual_state="In-Use")
+        existing_rows = [{
+            "ad_id": "1", "price_tier": "mid",
+            "creative_product_visual_state": "",
+        }]
+
+        rows, _ = build_feature_matrix(
+            ads_file=ads_file,
+            step2_out_dir=step2_dir,
+            embedding_client=_fake_embedding_client(),
+            existing_rows=existing_rows,
+        )
+
+        repaired = next(row for row in rows if row["ad_id"] == "1")
+        assert repaired["creative_product_visual_state"] == "In-Use"
 
     def test_checkpoint_path_gets_flushed_during_the_run(self, tmp_path):
         ads_file, step2_dir = self._setup(tmp_path)

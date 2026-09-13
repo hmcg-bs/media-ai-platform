@@ -236,9 +236,21 @@ def extract_generation_guide(
     ]
 
     # Cox: the only source with a real per-ad-outcome (not just tree-split
-    # importance) directional signal for days_active.
+    # importance) directional signal for days_active. Do not turn coefficients
+    # from an unevaluable holdout into generation advice: sparse event data can
+    # still produce fitted coefficients even when the test set has no
+    # admissible event pairs. Reports predating evaluation_status retain their
+    # established behavior for backwards compatibility.
     cox = training_report.get("model_results", {}).get("days_active", {}).get("cox_survival", {})
-    all_directional += _from_cox(cox.get("top_covariates", []), target="days_active")
+    cox_status = cox.get("evaluation_status")
+    if cox_status in (None, "ok"):
+        all_directional += _from_cox(cox.get("top_covariates", []), target="days_active")
+    else:
+        excluded_notes.append(
+            "Dropped Cox days_active directives because holdout evaluation status was "
+            f"'{cox_status}'; survival coefficients are not generation guidance until "
+            "the test set contains enough observed events and admissible pairs."
+        )
 
     # Composite success-score SHAP (without_embeddings -- interpretable
     # feature names only; the with_embeddings variant's top features are

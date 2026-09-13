@@ -18,7 +18,7 @@ from pathlib import Path
 
 from pipeline.config import get_settings
 from pipeline.logger import configure_logging, get_logger
-from pipeline.models.output_schema import PipelineContext
+from pipeline.models.output_schema import ExtractionResult, PipelineContext
 from pipeline.stages.base_stage import BaseStage, StageError
 from pipeline.stages.stage_01_metadata import MetadataStage
 from pipeline.stages.stage_02_ocr import OCRStage
@@ -104,7 +104,10 @@ def _run_stage(stage: BaseStage, context: PipelineContext) -> None:
 
 
 def run_one(
-    image_path: Path, stages: list[BaseStage], image_bytes: bytes | None = None
+    image_path: Path,
+    stages: list[BaseStage],
+    image_bytes: bytes | None = None,
+    initial_result: ExtractionResult | None = None,
 ) -> PipelineContext:
     """Run all stages on a single image with per-stage fallback.
 
@@ -127,7 +130,10 @@ def run_one(
     calls alone average ~18-19s, versus ~3-5s for the whole pre-chain.
     """
     context = PipelineContext(
-        ad_id=image_path.stem, image_path=str(image_path), image_bytes=image_bytes
+        ad_id=image_path.stem,
+        image_path=str(image_path),
+        image_bytes=image_bytes,
+        result=initial_result or ExtractionResult(),
     )
 
     cognitive_idx = next(

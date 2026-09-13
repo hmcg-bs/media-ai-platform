@@ -25,6 +25,8 @@ interfaces will later repoint to Vertex / Model Garden via ``settings.model_prov
 from __future__ import annotations
 
 import io
+import json
+import re
 import urllib.request
 from collections.abc import Callable
 from typing import Any, Protocol, TypeVar
@@ -56,6 +58,20 @@ def _is_retryable(exc: BaseException) -> bool:
     if isinstance(exc, ReplicateError):
         return getattr(exc, "status", None) in _RETRY_STATUS
     return False
+
+
+def _retry_after_seconds(exc: BaseException) -> float | None:
+    """Extract Replicate's reset hint from low-credit 429 messages."""
+    detail = getattr(exc, "detail", None)
+    if isinstance(detail, str):
+        text = detail
+    else:
+        try:
+            text = str(exc)
+        except (AttributeError, TypeError):
+            return None
+    match = re.search(r"rate limit resets in ~([0-9.]+)s", text, re.IGNORECASE)
+    return float(match.group(1)) if match else None
 
 
 class _HasRead(Protocol):
@@ -93,12 +109,21 @@ class _ReplicateBase:
 
     def _execute(self, model: str, inputs: dict[str, Any]) -> Any:
         """Run a model with retry on transient failures (429 / 5xx / timeouts)."""
+        exponential_wait = wait_exponential(
+            min=self.settings.api_backoff_min_seconds,
+            max=self.settings.api_backoff_max_seconds,
+        )
+
+        def wait_for_reset(retry_state: Any) -> float:
+            delay = float(exponential_wait(retry_state))
+            exc = retry_state.outcome.exception() if retry_state.outcome else None
+            reset = _retry_after_seconds(exc) if exc is not None else None
+            # One-second margin avoids racing Replicate's rounded reset clock.
+            return max(delay, reset + 1.0) if reset is not None else delay
+
         retryer = Retrying(
             stop=stop_after_attempt(self.settings.api_max_attempts),
-            wait=wait_exponential(
-                min=self.settings.api_backoff_min_seconds,
-                max=self.settings.api_backoff_max_seconds,
-            ),
+            wait=wait_for_reset,
             retry=retry_if_exception(_is_retryable),
             reraise=True,
         )
@@ -265,11 +290,16 @@ class ReplicateVisionClient(_ReplicateBase):
         b64_img = base64.b64encode(image_bytes).decode("utf-8")
         data_url = f"data:image/jpeg;base64,{b64_img}"
 
+        schema_prompt = (
+            f"{prompt}\n\nReturn exactly one JSON object matching this JSON Schema; "
+            "preserve its nesting and do not omit required container keys:\n"
+            f"{json.dumps(schema.model_json_schema(), separators=(',', ':'))}"
+        )
         out = self._execute(
             self.settings.replicate_gemini_model,
             {
                 "images": [data_url],
-                "prompt": prompt,
+                "prompt": schema_prompt,
             },
         )
         # Output may be a list of strings (streaming) or a single string.

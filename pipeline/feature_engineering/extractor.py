@@ -77,6 +77,7 @@ def extract_all_features(
     creative_features: dict[str, Any] | None = None,
     category_stats: dict[str, Any] | None = None,
     embedding_client: EmbeddingClient | None = None,
+    include_embeddings: bool = True,
 ) -> tuple[dict[str, Any], str]:
     """
     Extract all features from an ad record.
@@ -106,11 +107,12 @@ def extract_all_features(
     usp = product_page_raw.get("usp") if isinstance(product_page_raw, dict) else None
 
     # 1. TEXT EMBEDDINGS (3 features)
-    embeddings = extract_embedding_features(
-        title=ad.get("title"),
-        body=ad.get("body"),
-        usp=usp,
-        client=embedding_client,
+    embeddings = (
+        extract_embedding_features(
+            title=ad.get("title"), body=ad.get("body"), usp=usp, client=embedding_client,
+        )
+        if include_embeddings
+        else {"title_embedding": [], "body_embedding": [], "usp_embedding": []}
     )
     features.update(embeddings)
 

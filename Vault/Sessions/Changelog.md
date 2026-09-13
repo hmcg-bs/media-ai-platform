@@ -16,14 +16,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resumable Meta Ad Library ingestion checkpoints with atomic, collision-safe artifact writes
 - Reproducible Meta Performance-proxy reports with advertiser-group evaluation and input hashes
 - Meta Ads training and data-pipeline operations guide
+- Restartable Supplements scrape-to-SHAP workflow with nested advertiser/time tuning and segment evaluation
+- Censoring-aware Kaplan–Meier maturity benchmarks and supplement-subcategory provenance
+- Deep visual product, prop, relationship, texture, and human feature representation
+- Cloud Vision OCR/color backfill that preserves completed cognitive extraction
+- Capacity-safe no-embedding evaluation mode
 
 ### Changed
 - Aligned the competitor-ad Performance proxy to Longevity weighted by page-level Scaling with a Meta collation Variant boost
 - Preserved extraction missingness and active ads as right-censored observations during model preparation
+- Generation guidance now consumes the integrated training report and excludes unevaluable survival coefficients
+- Expanded the Supplements advertiser holdout from 35 to 101 ads
 
 ### Fixed
 - Prevented same-advertiser train/test leakage and same-output concurrent job corruption
 - URL-encoded Meta Ad Library search queries and rejected incompatible ingestion resumes
+- Sent Replicate the required nested Pydantic schema and added targeted repair for incomplete cognitive artifacts
+- Honored Replicate low-credit rate-limit reset hints and kept seeded sample resumes exact
 
 ### Removed
 - Target-derived cluster trend features from the default training CLI because their in-sample encoding leaked outcomes

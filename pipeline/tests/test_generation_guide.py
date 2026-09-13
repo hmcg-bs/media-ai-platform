@@ -111,6 +111,21 @@ class TestExtractGenerationGuide:
         assert cta[0].direction == "higher_is_better"
         assert cta[0].source == "cox:days_active"
 
+    def test_unevaluable_cox_model_is_not_used_as_generation_guidance(
+        self, reports, tmp_path: Path
+    ):
+        tr, sr = reports
+        training = json.loads(tr.read_text())
+        cox = training["model_results"]["days_active"]["cox_survival"]
+        cox["evaluation_status"] = "no_admissible_pairs"
+        invalid_report = tmp_path / "invalid_cox_report.json"
+        invalid_report.write_text(json.dumps(training))
+
+        guide = extract_generation_guide(invalid_report, sr)
+
+        assert not any(s.source == "cox:days_active" for s in guide.visual_directives)
+        assert any("no_admissible_pairs" in note for note in guide.excluded_notes)
+
     def test_low_reliability_shap_feature_excluded_from_directives(self, reports):
         tr, sr = reports
         guide = extract_generation_guide(tr, sr)

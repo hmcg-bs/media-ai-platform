@@ -9,9 +9,15 @@ import time
 from http.client import IncompleteRead
 from pathlib import Path
 
-from ingestion.run_step2_pipeline import fetch_image_bytes, run_step2_pipeline
-from pipeline.models.output_schema import PipelineContext
+from ingestion.run_step2_pipeline import (
+    _cognitive_incomplete,
+    fetch_image_bytes,
+    run_step2_pipeline,
+)
+from pipeline.models.output_schema import ExtractionResult, PipelineContext, PrimaryProduct
 from pipeline.stages.base_stage import BaseStage
+from pipeline.stages.stage_02_ocr import OCRStage
+from pipeline.stages.stage_03_color import ColorStage
 
 
 class _RecordingStage(BaseStage):
@@ -24,6 +30,26 @@ class _RecordingStage(BaseStage):
         assert context.image_bytes is not None, "image_bytes must be pre-supplied"
         context.result.ad_id = context.ad_id
         context.result.imagery_description = f"bytes_len={len(context.image_bytes)}"
+        return context
+
+
+class _FakeOCRStage(OCRStage):
+    def __init__(self) -> None:
+        pass
+
+    def process(self, context: PipelineContext) -> PipelineContext:
+        context.result.copywriting_features.total_word_count = 7
+        context.ocr_boxes = [[(0, 0), (1, 0), (1, 1), (0, 1)]]
+        return context
+
+
+class _FakeColorStage(ColorStage):
+    def __init__(self) -> None:
+        pass
+
+    def process(self, context: PipelineContext) -> PipelineContext:
+        assert context.ocr_boxes
+        context.result.color_profile.background_style = "Studio"
         return context
 
 
@@ -52,6 +78,13 @@ class TestFetchImageBytesHandlesIncompleteRead:
         )
         result = fetch_image_bytes("https://cdn.example.com/a.jpg")
         assert result is None
+
+
+def test_cognitive_repair_detection_distinguishes_empty_from_extracted() -> None:
+    assert _cognitive_incomplete(ExtractionResult()) is True
+    extracted = ExtractionResult()
+    extracted.spatial_and_nested_objects.primary_product = PrimaryProduct(name="jar")
+    assert _cognitive_incomplete(extracted) is False
 
 
 class TestRunStep2Pipeline:
@@ -120,6 +153,32 @@ class TestRunStep2Pipeline:
         assert calls == []  # never even attempted a fetch for an already-done ad
         # existing output untouched
         assert json.loads((out_dir / "444.json").read_text())["already"] == "here"
+
+    def test_reprocess_ocr_preserves_cognitive_output_and_reruns_color(
+        self, tmp_path: Path
+    ) -> None:
+        ads_file = tmp_path / "ads.json"
+        ads_file.write_text(json.dumps([
+            {"ad_archive_id": "444", "image_urls": ["https://cdn.example.com/a.jpg"]},
+        ]))
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+        existing = ExtractionResult(ad_id="444", imagery_description="keep cognitive")
+        (out_dir / "444.json").write_text(existing.model_dump_json())
+
+        count = run_step2_pipeline(
+            ads_file,
+            out_dir,
+            stages=[_RecordingStage(), _FakeOCRStage(), _FakeColorStage()],
+            fetch_fn=_fake_fetch_ok,
+            reprocess_ocr=True,
+        )
+
+        assert count == 1
+        repaired = ExtractionResult.model_validate_json((out_dir / "444.json").read_text())
+        assert repaired.imagery_description == "keep cognitive"
+        assert repaired.copywriting_features.total_word_count == 7
+        assert repaired.color_profile.background_style == "Studio"
 
     def test_sample_size_limits_and_is_reproducible(self, tmp_path: Path) -> None:
         ads_file = tmp_path / "ads.json"

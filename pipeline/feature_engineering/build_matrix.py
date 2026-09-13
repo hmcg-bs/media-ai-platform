@@ -88,6 +88,7 @@ def build_feature_matrix(
     existing_rows: list[dict[str, Any]] | None = None,
     checkpoint_path: Path | None = None,
     checkpoint_every: int = 25,
+    include_embeddings: bool = True,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Returns (rows, summary). Each row is
     {ad_id, price_tier, **features}. `summary` reports row count,
@@ -113,16 +114,37 @@ def build_feature_matrix(
     if sample_size is not None:
         rng = random.Random(seed)
         ads = rng.sample(ads, min(sample_size, len(ads)))
+    selected_ids = {str(ad.get("ad_archive_id")) for ad in ads}
 
     creative_by_id = load_step2_results(step2_out_dir)
     embedding_client = embedding_client or EmbeddingClient()
 
     ads_by_id = {str(ad.get("ad_archive_id")): ad for ad in all_ads}
     existing_rows = existing_rows or []
+    if sample_size is not None:
+        # A different sample size with the same seed is not guaranteed to be
+        # a strict superset under random.sample(). Retain paid embeddings only
+        # for rows in this run's exact sample; otherwise resume silently grows
+        # beyond --sample-size and makes the report irreproducible.
+        existing_rows = [
+            row for row in existing_rows if str(row.get("ad_id")) in selected_ids
+        ]
     rows: list[dict[str, Any]] = []
     for existing in existing_rows:
         row = dict(existing)
+        if not include_embeddings:
+            for name in ("title_embedding", "body_embedding", "usp_embedding"):
+                row[name] = []
         ad = ads_by_id.get(str(row.get("ad_id")), {})
+        creative = creative_by_id.get(str(row.get("ad_id")))
+        if creative is not None:
+            color_keys = {
+                "background_hex", "background_style", "dominant_hex_palette",
+                "contrast_ratio_type", "ad_id", "aspect_ratio",
+            }
+            for key, value in creative.items():
+                if key not in color_keys:
+                    row[f"creative_{key}"] = value
         page_id = str(ad.get("page_id") or row.get("page_id") or "")
         row["page_id"] = page_id
         search_queries = ad.get("search_queries", [])
@@ -150,7 +172,10 @@ def build_feature_matrix(
 
         try:
             features, price_tier = extract_all_features(
-                ad, creative_features=creative_features, embedding_client=embedding_client
+                ad,
+                creative_features=creative_features,
+                embedding_client=embedding_client,
+                include_embeddings=include_embeddings,
             )
         except Exception:
             logger.warning("feature_extraction_failed", ad_id=ad_id, exc_info=True)
@@ -185,6 +210,7 @@ def build_feature_matrix(
         "failed": failed,
         "price_tier_distribution": dict(price_tier_counts),
         "creative_hook_framework_distribution": dict(hook_framework_counts),
+        "embeddings_included": include_embeddings,
     }
     return rows, summary
 
@@ -214,6 +240,10 @@ def main() -> None:
         help="Ignore any existing --out file and reprocess every ad from scratch "
         "(default: resume, skipping ad_ids already present in --out).",
     )
+    parser.add_argument(
+        "--skip-embeddings", action="store_true",
+        help="Build deterministic/creative features without paid Replicate embeddings.",
+    )
     args = parser.parse_args()
     if args.checkpoint_every < 1:
         parser.error("--checkpoint-every must be at least 1")
@@ -230,6 +260,7 @@ def main() -> None:
             sample_size=args.sample_size, seed=args.seed,
             existing_rows=existing_rows,
             checkpoint_path=args.out, checkpoint_every=args.checkpoint_every,
+            include_embeddings=not args.skip_embeddings,
         )
         _write_rows(args.out, rows)
     elapsed = time.monotonic() - start

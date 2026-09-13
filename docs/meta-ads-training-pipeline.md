@@ -67,14 +67,20 @@ Step 2 runs deterministic metadata/color plus Replicate cognitive Extraction:
 uv run python -m ingestion.run_step2_pipeline \
   --ads data/supplements_fresh.json \
   --out out/step2-supplements \
-  --cognitive-provider replicate --skip-ocr --concurrency 4
+  --cognitive-provider replicate \
+  --reprocess-incomplete-cognitive --concurrency 4
 ```
 
-`--skip-ocr` is explicit because this environment has no GCP ADC. It does not
-fabricate typography/copy-layout values; their missingness remains visible to
-the model. Supply GCP ADC and omit the flag when Cloud Vision OCR is required.
+Stage 2 uses Cloud Vision `document_text_detection` through `vision_client.py`.
+Use `--skip-ocr` only when GCP ADC is unavailable; it does not fabricate
+typography/copy-layout values, and their missingness remains visible to the
+model. After restoring ADC, add `--reprocess-ocr` to backfill OCR and
+OCR-masked color on existing artifacts without repeating paid cognitive calls.
 The output directory is locked to prevent concurrent jobs duplicating paid
 calls, and each ad JSON is atomically published.
+The repair flag preserves successful metadata/color/marketing fields and
+reruns only the deep cognitive stage when an older artifact is structurally
+empty.
 
 ```bash
 uv run python -m pipeline.feature_engineering.build_matrix \
@@ -88,6 +94,9 @@ The matrix carries `page_id` for grouped evaluation and
 `has_product_page` and `has_step2_features`, plus numeric missing-value
 indicators, distinguish absent extraction stages from genuine zero values.
 Existing checkpoints are schema-refreshed with page/scaling metadata on resume.
+Use `--skip-embeddings` when Replicate embedding capacity is unavailable; the
+matrix records empty embedding vectors, training omits the embedding ablation,
+and the deterministic/cognitive feature model remains fully evaluable.
 
 ## Training and evaluation
 
@@ -121,6 +130,9 @@ The final report embeds interpretable Tree SHAP values. Generation reads that
 same report directly and emits `supplements_generation_guide.json`; only
 directionally reliable, renderable features become directives. Embedding
 dimensions, missing-data levels, and campaign-operation fields are excluded.
+Cox coefficients are also excluded whenever the survival holdout has no
+admissible event pairs; a fitted but unevaluable longevity model must not steer
+generation.
 
 `--workers-per-model 1` is deliberate: separate jobs can run concurrently
 without each XGBoost process claiming every CPU. Use distinct report paths for
