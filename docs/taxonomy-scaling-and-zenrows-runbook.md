@@ -18,9 +18,29 @@ not literature-derived universal constants. Failure leaves all automated admissi
 
 ## Sequential workflow
 
-1. Complete `.amp/in/artifacts/supplements_taxonomy_review_v1.json`. Every row needs a primary
-   decision; at least 20% need an independent second review; disagreements need an independent
-   adjudicator. The existing κ ≥0.80 gate remains unchanged.
+1. Open `supplements_taxonomy_review_v1.html` directly after pulling the repository. It is a
+   self-contained copy of the frozen 120-ad review and includes the full ad copy, available creative
+   image URL, Meta snapshot link, and product-page link. Enter a stable reviewer ID, label the
+   primary decisions, and use **Download review JSON** regularly. Browser storage is only a local
+   convenience; the downloaded JSON is the durable handoff.
+
+   Import that JSON into a second reviewer's browser and select **Independent second reviewer** for
+   at least 24 ads. Reviewer IDs must differ. Import the result for an independent adjudicator to
+   resolve every binary or subcategory disagreement with a rationale. Sampling strata are displayed
+   only as review aids and must not be copied into decisions as presumed labels.
+
+   Place the final download at `.amp/in/artifacts/supplements_taxonomy_review_v1.json`. Every row
+   needs a primary decision; at least 20% need an independent second review; disagreements need an
+   independent adjudicator. The existing κ ≥0.80 gate remains unchanged. To rebuild the HTML from a
+   new immutable review version, run:
+
+   ```bash
+   uv run python -m pipeline.validation.taxonomy_review_html \
+     --review .amp/in/artifacts/supplements_taxonomy_review_v1.json \
+     --sample .amp/in/artifacts/supplements_taxonomy_sample_120.json \
+     --out supplements_taxonomy_review_v1.html
+   ```
+
 2. Validate the review. The report now retains a hash-bound full binary gold label set in addition
    to the positive-only approved-label file:
 

@@ -82,6 +82,9 @@ select = ["E", "F", "W", "I", "N", "UP"]
 "pipeline/tests/test_success_score.py" = ["N803", "N806"]
 "pipeline/tests/test_trainer.py" = ["N803", "N806"]
 "pipeline/tests/test_survival.py" = ["N803", "N806"]
+# The builder intentionally embeds readable HTML, CSS, and JavaScript in one
+# Python string so the generated review file has no runtime dependencies.
+"pipeline/validation/taxonomy_review_html.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"
