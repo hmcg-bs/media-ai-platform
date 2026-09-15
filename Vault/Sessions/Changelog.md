@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Product context features for review volume, description/USP coverage, and subscription status
 - Advertiser-clustered uncertainty and a pre-registered analysis-only proxy/SHAP sensitivity runner
 - Gold-validated, provenance-bound classifier scaling for full-corpus Supplements admission
+- Self-contained interactive review for the frozen 120-ad Supplements taxonomy gold set
 
 ### Changed
 - Aligned the competitor-ad Performance proxy to Longevity weighted by page-level Scaling with a Meta collation Variant boost

@@ -33,3 +33,4 @@ Detailed commit history with dates, branches, and descriptions.
 | 2026-09-13 | auto/meta-ads-model-pipeline | a52317e | Record pre-taxonomy proxy sensitivity diagnostic |
 | 2026-09-13 | auto/meta-ads-model-pipeline | 2a4c460 | Scale taxonomy through validated classifier admission |
 | 2026-09-13 | master | 618ff2d | Ship refactored Meta model/data pipeline |
+| 2026-09-15 | auto/meta-ads-model-pipeline | 5536429 | Add interactive Supplements taxonomy reviewer |
